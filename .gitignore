@@ -1,0 +1,24 @@
+﻿# Build outputs
+bin/
+obj/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Distribution artifacts
+dist/
+
+# Game-managed DLLs (keep README only)
+GameLibs/*
+!GameLibs/README.md
+
+# Local build caches
+*.cache
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
