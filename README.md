@@ -1,6 +1,6 @@
 ﻿# OpenSewer
 
-OpenSewer is a BepInEx 5 mod for **Obenseuer** that adds an in-game utility menu with an item spawner.
+OpenSewer is a BepInEx 5 mod for **Obenseuer** that adds an in-game utility menu with an item spawner + furniture spawner
 
 The mod keeps gameplay hooks simple:
 - Open/close menu with `U`
