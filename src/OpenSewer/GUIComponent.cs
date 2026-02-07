@@ -31,8 +31,10 @@ namespace OpenSewer
         Vector2 mainTabScrollPos;
         Vector2 _statsScrollPos;
         bool windowHover;
-        bool showGodModeTodo;
-        bool showNoClipTodo;
+        string _mainDayInput = "1";
+        string _mainHourInput = "0";
+        string _mainMinuteInput = "0";
+        bool _suppressMainTimeSyncThisFrame;
         Item selectedItem;
         bool _showAmountPicker;
         Item _amountPickerItem;
@@ -356,10 +358,103 @@ namespace OpenSewer
         private void DrawMainTab()
         {
             var hasStats = PlayerStatsReader.TryGetSnapshot(out var stats);
+            bool timeReady = TimeAccess.IsReady();
+            int liveDay = 1;
+            int liveHour = 0;
+            int liveMinute = 0;
+            if (timeReady)
+                TimeAccess.GetSnapshot(out liveDay, out liveHour, out liveMinute);
 
             using (var scroll = new GUILayout.ScrollViewScope(mainTabScrollPos, GUILayout.MinHeight(minHeight)))
             {
                 mainTabScrollPos = scroll.scrollPosition;
+
+                using (new GUILayout.VerticalScope("box"))
+                {
+                    GUILayout.Label("Time", sectionHeaderStyle);
+                    if (timeReady)
+                    {
+                        GUILayout.Label($"Day {liveDay} - {liveHour:00}:{liveMinute:00}");
+                    }
+                    else
+                    {
+                        GUILayout.Label("Time not ready - load into a save");
+                    }
+
+                    bool prevEnabled = GUI.enabled;
+                    GUI.enabled = prevEnabled && timeReady;
+                    bool applyClicked = false;
+
+                    using (new GUILayout.HorizontalScope())
+                    {
+                        GUILayout.Label("Day", GUILayout.Width(32f));
+                        GUI.SetNextControlName("main.time.day");
+                        _mainDayInput = GUILayout.TextField(_mainDayInput, GUILayout.Width(54f));
+
+                        GUILayout.Label("Hour", GUILayout.Width(34f));
+                        GUI.SetNextControlName("main.time.hour");
+                        _mainHourInput = GUILayout.TextField(_mainHourInput, GUILayout.Width(48f));
+
+                        GUILayout.Label("Minute", GUILayout.Width(42f));
+                        GUI.SetNextControlName("main.time.minute");
+                        _mainMinuteInput = GUILayout.TextField(_mainMinuteInput, GUILayout.Width(48f));
+
+                        if (GUILayout.Button("Apply", GUILayout.Width(64f)))
+                        {
+                            applyClicked = true;
+                            _suppressMainTimeSyncThisFrame = true;
+
+                            int parsedDay = ParseMainTimeInt(_mainDayInput, liveDay);
+                            int parsedHour = ParseMainTimeInt(_mainHourInput, liveHour);
+                            int parsedMinute = ParseMainTimeInt(_mainMinuteInput, liveMinute);
+
+                            int clampedDay = TimeAccess.ClampDay(parsedDay);
+                            int clampedHour = TimeAccess.ClampHour(parsedHour);
+                            int clampedMinute = TimeAccess.ClampMinute(parsedMinute);
+
+                            TimeAccess.SetDay(clampedDay);
+                            TimeAccess.SetHourMinute(clampedHour, clampedMinute);
+
+                            if (TimeFreezer.FreezeEnabled)
+                                TimeFreezer.SetTarget(clampedDay, clampedHour, clampedMinute);
+
+                            TimeAccess.GetSnapshot(out int appliedDay, out int appliedHour, out int appliedMinute);
+                            _mainDayInput = appliedDay.ToString(CultureInfo.InvariantCulture);
+                            _mainHourInput = appliedHour.ToString(CultureInfo.InvariantCulture);
+                            _mainMinuteInput = appliedMinute.ToString(CultureInfo.InvariantCulture);
+                        }
+                    }
+
+                    bool freezeTime = TimeFreezer.FreezeEnabled;
+                    bool nextFreeze = GUILayout.Toggle(freezeTime, "Freeze Time");
+                    if (nextFreeze != freezeTime)
+                    {
+                        TimeFreezer.FreezeEnabled = nextFreeze;
+                        if (nextFreeze)
+                        {
+                            TimeFreezer.CaptureCurrent();
+                            _mainDayInput = TimeFreezer.FrozenDay.ToString(CultureInfo.InvariantCulture);
+                            _mainHourInput = TimeFreezer.FrozenHour.ToString(CultureInfo.InvariantCulture);
+                            _mainMinuteInput = TimeFreezer.FrozenMinute.ToString(CultureInfo.InvariantCulture);
+                        }
+                    }
+
+                    string focusedControl = GUI.GetNameOfFocusedControl();
+                    bool editingTimeInput =
+                        focusedControl == "main.time.day" ||
+                        focusedControl == "main.time.hour" ||
+                        focusedControl == "main.time.minute";
+
+                    if (!editingTimeInput && !_suppressMainTimeSyncThisFrame && !applyClicked)
+                    {
+                        SyncMainTimeInput("main.time.day", ref _mainDayInput, liveDay);
+                        SyncMainTimeInput("main.time.hour", ref _mainHourInput, liveHour);
+                        SyncMainTimeInput("main.time.minute", ref _mainMinuteInput, liveMinute);
+                    }
+
+                    GUI.enabled = prevEnabled;
+                    _suppressMainTimeSyncThisFrame = false;
+                }
 
                 using (new GUILayout.VerticalScope("box"))
                 {
@@ -394,19 +489,6 @@ namespace OpenSewer
                         DrawInfoRow("WC Need", "N/A");
                         DrawInfoRow("Hygiene", "N/A");
                     }
-                }
-
-                using (new GUILayout.VerticalScope("box"))
-                {
-                    if (GUILayout.Button("Enable God Mode"))
-                        showGodModeTodo = true;
-                    if (showGodModeTodo)
-                        GUILayout.Label("TODO: hook console command");
-
-                    if (GUILayout.Button("Enable NoClip"))
-                        showNoClipTodo = true;
-                    if (showNoClipTodo)
-                        GUILayout.Label("TODO: hook console command");
                 }
             }
         }
@@ -676,6 +758,25 @@ namespace OpenSewer
         {
             return float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
                 || float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value);
+        }
+
+        private void SyncMainTimeInput(string controlName, ref string buffer, int value)
+        {
+            if (GUI.GetNameOfFocusedControl() == controlName)
+                return;
+
+            buffer = value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static int ParseMainTimeInt(string text, int fallback)
+        {
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
+                return parsed;
+
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.CurrentCulture, out parsed))
+                return parsed;
+
+            return fallback;
         }
 
         private void DrawStatBar(string label, float value)

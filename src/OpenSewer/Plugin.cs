@@ -54,6 +54,7 @@ public class Plugin : BaseUnityPlugin
 
         gameObject.AddComponent<InputHandler>();
         gameObject.AddComponent<StatFreezer>();
+        gameObject.AddComponent<TimeFreezer>();
 
         Application.targetFrameRate = 30;
     }
