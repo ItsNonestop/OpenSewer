@@ -1,6 +1,7 @@
-﻿using OpenSewer.Utility;
+using OpenSewer.Utility;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reactive.Linq;
 using UnityEngine;
@@ -28,6 +29,7 @@ namespace OpenSewer
         Vector2 categoryScrollPos;
         Vector2 itemScrollPos;
         Vector2 mainTabScrollPos;
+        Vector2 _statsScrollPos;
         bool windowHover;
         bool showGodModeTodo;
         bool showNoClipTodo;
@@ -61,7 +63,41 @@ namespace OpenSewer
         IDisposable selectedCategoriesSub;
         IDisposable hoverItemSub;
         IDisposable textFilterSub;
+        readonly Dictionary<string, string> _statsInputBuffers = [];
+        bool _statsShowVitals = true;
+        bool _statsShowNeeds = true;
+        bool _statsShowMental = true;
+        bool _statsShowAddictions = true;
+        bool _statsShowAdvanced;
 
+        private readonly struct EditableStatRow
+        {
+            public readonly string Key;
+            public readonly string Label;
+            public readonly Func<float> GetValue;
+            public readonly Action<float> SetValue;
+            public readonly float Min;
+            public readonly float Max;
+            public readonly bool IsPercentLike;
+
+            public EditableStatRow(
+                string key,
+                string label,
+                Func<float> getValue,
+                Action<float> setValue,
+                float min,
+                float max,
+                bool isPercentLike)
+            {
+                Key = key;
+                Label = label;
+                GetValue = getValue;
+                SetValue = setValue;
+                Min = min;
+                Max = max;
+                IsPercentLike = isPercentLike;
+            }
+        }
         void CategorySelectionChanged<T>(T _)
         {
             var filterText = TextFilter.Value.Trim();
@@ -319,25 +355,45 @@ namespace OpenSewer
 
         private void DrawMainTab()
         {
+            var hasStats = PlayerStatsReader.TryGetSnapshot(out var stats);
+
             using (var scroll = new GUILayout.ScrollViewScope(mainTabScrollPos, GUILayout.MinHeight(minHeight)))
             {
                 mainTabScrollPos = scroll.scrollPosition;
 
                 using (new GUILayout.VerticalScope("box"))
                 {
-                    GUILayout.Label("Stats Overview", sectionHeaderStyle);
-                    DrawStatBar("Health", 0.5f);
-                    DrawStatBar("Hunger", 0.5f);
-                    DrawStatBar("Thirst", 0.5f);
+                    GUILayout.Label("Player Stats", sectionHeaderStyle);
+                    if (!hasStats)
+                    {
+                        GUILayout.Label("Stats not ready (load into a save)");
+                    }
+                    else
+                    {
+                        GUILayout.Label("Stats Overview", sectionHeaderStyle);
+                        DrawStatValueRow("Health", stats.Health);
+                        DrawStatValueRow("Hunger", stats.Hunger);
+                        DrawStatValueRow("Thirst", stats.Thirst);
+                    }
                 }
 
                 using (new GUILayout.VerticalScope("box"))
                 {
                     GUILayout.Label("General Info", sectionHeaderStyle);
-                    DrawInfoRow("Depression", "Placeholder");
-                    DrawInfoRow("Sleep Need", "Placeholder");
-                    DrawInfoRow("WC Need", "Placeholder");
-                    DrawInfoRow("Hygiene", "Placeholder");
+                    if (hasStats)
+                    {
+                        DrawInfoRow("Depression", FormatStatValue(stats.Depression));
+                        DrawInfoRow("Sleep Need", FormatStatValue(stats.SleepNeed));
+                        DrawInfoRow("WC Need", FormatStatValue(stats.WCNeed));
+                        DrawInfoRow("Hygiene", FormatStatValue(stats.Hygiene));
+                    }
+                    else
+                    {
+                        DrawInfoRow("Depression", "N/A");
+                        DrawInfoRow("Sleep Need", "N/A");
+                        DrawInfoRow("WC Need", "N/A");
+                        DrawInfoRow("Hygiene", "N/A");
+                    }
                 }
 
                 using (new GUILayout.VerticalScope("box"))
@@ -355,12 +411,271 @@ namespace OpenSewer
             }
         }
 
+        private void DrawStatValueRow(string label, StatValue value)
+        {
+            using (new GUILayout.HorizontalScope())
+            {
+                GUILayout.Label(label, GUILayout.Width(110));
+                if (!value.HasValue)
+                {
+                    GUILayout.Label("N/A");
+                }
+                else if (value.HasMax && value.Max > 0f)
+                {
+                    float ratio = Mathf.Clamp01(value.Value / value.Max);
+                    GUILayout.HorizontalSlider(ratio, 0f, 1f, GUILayout.MinWidth(220));
+                    GUILayout.Label($"{value.Value:0.##}/{value.Max:0.##} ({Mathf.RoundToInt(ratio * 100f)}%)", GUILayout.Width(150));
+                }
+                else
+                {
+                    GUILayout.Label($"{value.Value:0.##}");
+                }
+            }
+        }
+
+        private static string FormatStatValue(StatValue value)
+        {
+            if (!value.HasValue)
+                return "N/A";
+
+            if (value.HasMax && value.Max > 0f)
+            {
+                float ratio = Mathf.Clamp01(value.Value / value.Max);
+                return $"{value.Value:0.##}/{value.Max:0.##} ({Mathf.RoundToInt(ratio * 100f)}%)";
+            }
+
+            return $"{value.Value:0.##}";
+        }
+
         private void DrawStatsTab()
         {
-            using (new GUILayout.VerticalScope("box", GUILayout.MinHeight(minHeight)))
+            var vitalsRows = BuildVitalsRows();
+            var needsRows = BuildNeedsRows();
+            var mentalRows = BuildMentalRows();
+            var addictionsRows = BuildAddictionsRows();
+            var advancedRows = BuildAdvancedRows();
+
+            bool isReady = PlayerStatsAccess.IsReady();
+
+            using (var scroll = new GUILayout.ScrollViewScope(_statsScrollPos, false, true, GUILayout.MinHeight(minHeight)))
             {
-                GUILayout.Label("Stats tab coming soon", sectionHeaderStyle);
+                _statsScrollPos = scroll.scrollPosition;
+
+                using (new GUILayout.VerticalScope("box"))
+                {
+                    GUILayout.Label("Stats Editor", sectionHeaderStyle);
+                    GUILayout.Label(isReady
+                        ? "Live values. Slider and numeric input apply immediately."
+                        : "Stats not ready - load into a save");
+
+                    bool freezeAll = StatFreezer.FreezeAllEnabled;
+                    bool freezeAllNext = GUILayout.Toggle(freezeAll, "Freeze All");
+                    if (freezeAllNext != freezeAll)
+                    {
+                        if (freezeAllNext)
+                        {
+                            var visibleKeys = BuildVisibleStatsRowKeys(vitalsRows, needsRows, mentalRows, addictionsRows, advancedRows);
+                            StatFreezer.FreezeAllEnabled = true;
+                            StatFreezer.EnableFreezeForKeys(visibleKeys);
+                        }
+                        else
+                        {
+                            StatFreezer.DisableAllFrozen();
+                        }
+                    }
+                }
+
+                bool prevEnabled = GUI.enabled;
+                GUI.enabled = prevEnabled && isReady;
+
+                DrawStatsSection("Vitals", ref _statsShowVitals, vitalsRows);
+                DrawStatsSection("Needs", ref _statsShowNeeds, needsRows);
+                DrawStatsSection("Mental", ref _statsShowMental, mentalRows);
+                DrawStatsSection("Addictions", ref _statsShowAddictions, addictionsRows);
+                DrawStatsSection("Advanced", ref _statsShowAdvanced, advancedRows);
+
+                GUI.enabled = prevEnabled;
             }
+        }
+
+        private List<EditableStatRow> BuildVitalsRows()
+        {
+            return
+            [
+                new EditableStatRow("vitals.health", "Health", PlayerStatsAccess.GetHealth, PlayerStatsAccess.SetHealth, 0f, 100f, true)
+            ];
+        }
+
+        private List<EditableStatRow> BuildNeedsRows()
+        {
+            return
+            [
+                new EditableStatRow("needs.hunger", "Hunger", PlayerStatsAccess.GetHunger, PlayerStatsAccess.SetHunger, 0f, 100f, true),
+                new EditableStatRow("needs.thirst", "Thirst", PlayerStatsAccess.GetThirst, PlayerStatsAccess.SetThirst, 0f, 100f, true),
+                new EditableStatRow("needs.sleep", "Sleep Need", PlayerStatsAccess.GetSleepNeed, PlayerStatsAccess.SetSleepNeed, 0f, 100f, true),
+                new EditableStatRow("needs.wc", "WC Need", PlayerStatsAccess.GetWcNeed, PlayerStatsAccess.SetWcNeed, 0f, 100f, true),
+                new EditableStatRow("needs.hygiene", "Hygiene", PlayerStatsAccess.GetHygiene, PlayerStatsAccess.SetHygiene, 0f, 100f, true)
+            ];
+        }
+
+        private List<EditableStatRow> BuildMentalRows()
+        {
+            return
+            [
+                new EditableStatRow("mental.depression", "Depression", PlayerStatsAccess.GetDepression, PlayerStatsAccess.SetDepression, 0f, 100f, true)
+            ];
+        }
+
+        private List<EditableStatRow> BuildAddictionsRows()
+        {
+            return
+            [
+                new EditableStatRow("addictions.need.mushroom", "Mushroom Need", PlayerStatsAccess.GetMushroomNeed, PlayerStatsAccess.SetMushroomNeed, 0f, 100f, true),
+                new EditableStatRow("addictions.need.alcohol", "Alcohol Need", PlayerStatsAccess.GetAlcoholNeed, PlayerStatsAccess.SetAlcoholNeed, 0f, 100f, true),
+                new EditableStatRow("addictions.need.smoking", "Smoking Need", PlayerStatsAccess.GetSmokingNeed, PlayerStatsAccess.SetSmokingNeed, 0f, 100f, true),
+                new EditableStatRow("addictions.need.gambling", "Gambling Need", PlayerStatsAccess.GetGamblingNeed, PlayerStatsAccess.SetGamblingNeed, 0f, 100f, true),
+                new EditableStatRow("addictions.level.mushroom", "Mushroom Addiction", PlayerStatsAccess.GetMushroomAddiction, PlayerStatsAccess.SetMushroomAddiction, 0f, 100f, true),
+                new EditableStatRow("addictions.level.alcohol", "Alcohol Addiction", PlayerStatsAccess.GetAlcoholAddiction, PlayerStatsAccess.SetAlcoholAddiction, 0f, 100f, true),
+                new EditableStatRow("addictions.level.smoking", "Smoking Addiction", PlayerStatsAccess.GetSmokingAddiction, PlayerStatsAccess.SetSmokingAddiction, 0f, 100f, true),
+                new EditableStatRow("addictions.level.gambling", "Gambling Addiction", PlayerStatsAccess.GetGamblingAddiction, PlayerStatsAccess.SetGamblingAddiction, 0f, 100f, true)
+            ];
+        }
+
+        private List<EditableStatRow> BuildAdvancedRows()
+        {
+            return
+            [
+                new EditableStatRow("advanced.rate.need.mushroom", "Mushroom Need Baserate", PlayerStatsAccess.GetMushroomNeedBaserate, PlayerStatsAccess.SetMushroomNeedBaserate, -1000f, 1000f, false),
+                new EditableStatRow("advanced.rate.need.alcohol", "Alcohol Need Baserate", PlayerStatsAccess.GetAlcoholNeedBaserate, PlayerStatsAccess.SetAlcoholNeedBaserate, -1000f, 1000f, false),
+                new EditableStatRow("advanced.rate.need.smoking", "Smoking Need Baserate", PlayerStatsAccess.GetSmokingNeedBaserate, PlayerStatsAccess.SetSmokingNeedBaserate, -1000f, 1000f, false),
+                new EditableStatRow("advanced.rate.need.gambling", "Gambling Need Baserate", PlayerStatsAccess.GetGamblingNeedBaserate, PlayerStatsAccess.SetGamblingNeedBaserate, -1000f, 1000f, false),
+                new EditableStatRow("advanced.rate.change.mushroom", "Mushroom Addiction Change", PlayerStatsAccess.GetMushroomAddictionChange, PlayerStatsAccess.SetMushroomAddictionChange, -1000f, 1000f, false),
+                new EditableStatRow("advanced.rate.change.alcohol", "Alcohol Addiction Change", PlayerStatsAccess.GetAlcoholAddictionChange, PlayerStatsAccess.SetAlcoholAddictionChange, -1000f, 1000f, false),
+                new EditableStatRow("advanced.rate.change.smoking", "Smoking Addiction Change", PlayerStatsAccess.GetSmokingAddictionChange, PlayerStatsAccess.SetSmokingAddictionChange, -1000f, 1000f, false),
+                new EditableStatRow("advanced.rate.change.gambling", "Gambling Addiction Change", PlayerStatsAccess.GetGamblingAddictionChange, PlayerStatsAccess.SetGamblingAddictionChange, -1000f, 1000f, false),
+                new EditableStatRow("advanced.withdrawal.mental", "Withdrawal MentalHealth Loss", PlayerStatsAccess.GetWithdrawalMentalHealthLoss, PlayerStatsAccess.SetWithdrawalMentalHealthLoss, -1000f, 1000f, false)
+            ];
+        }
+
+        private void DrawStatsSection(string title, ref bool expanded, List<EditableStatRow> rows)
+        {
+            using (new GUILayout.VerticalScope("box"))
+            {
+                if (GUILayout.Button($"{(expanded ? "[-]" : "[+]")} {title}", GUILayout.Height(24)))
+                    expanded = !expanded;
+
+                if (expanded)
+                {
+                    foreach (var row in rows)
+                        DrawEditableStatRow(row);
+                }
+            }
+        }
+
+        private void DrawEditableStatRow(EditableStatRow row)
+        {
+            float current = PlayerStatsAccess.ClampRange(row.GetValue.Invoke(), row.Min, row.Max);
+            string controlName = $"stats.input.{row.Key}";
+            bool rowFrozen = StatFreezer.GetFrozenEnabled(row.Key);
+
+            if (!_statsInputBuffers.TryGetValue(row.Key, out var buffer))
+                buffer = FormatStatInput(current);
+
+            if (GUI.GetNameOfFocusedControl() != controlName)
+                buffer = FormatStatInput(current);
+
+            using (new GUILayout.HorizontalScope())
+            {
+                GUILayout.Label(row.Label, GUILayout.Width(166f));
+
+                bool rowFrozenNext = GUILayout.Toggle(rowFrozen, "Freeze", GUILayout.Width(62f));
+                if (rowFrozenNext != rowFrozen)
+                {
+                    StatFreezer.SetFrozenEnabled(row.Key, rowFrozenNext);
+                    rowFrozen = rowFrozenNext;
+                    if (!rowFrozenNext)
+                        StatFreezer.FreezeAllEnabled = false;
+                }
+
+                float sliderValue = GUILayout.HorizontalSlider(current, row.Min, row.Max, GUILayout.MinWidth(220f));
+                if (!Mathf.Approximately(sliderValue, current))
+                {
+                    float clampedSlider = PlayerStatsAccess.ClampRange(sliderValue, row.Min, row.Max);
+                    row.SetValue.Invoke(clampedSlider);
+                    current = clampedSlider;
+                    buffer = FormatStatInput(clampedSlider);
+                    if (rowFrozen)
+                        StatFreezer.SetFrozenTarget(row.Key, clampedSlider);
+                }
+
+                GUI.SetNextControlName(controlName);
+                string nextBuffer = GUILayout.TextField(buffer, GUILayout.Width(78f));
+                if (!string.Equals(nextBuffer, buffer, StringComparison.Ordinal))
+                {
+                    buffer = nextBuffer;
+                    if (TryParseFloat(nextBuffer, out float typedValue))
+                    {
+                        float clampedTyped = PlayerStatsAccess.ClampRange(typedValue, row.Min, row.Max);
+                        row.SetValue.Invoke(clampedTyped);
+                        current = clampedTyped;
+                        buffer = FormatStatInput(clampedTyped);
+                        if (rowFrozen)
+                            StatFreezer.SetFrozenTarget(row.Key, clampedTyped);
+                    }
+                }
+
+                GUILayout.Label(FormatStatDisplay(current, row.Min, row.Max, row.IsPercentLike), GUILayout.Width(110f));
+                GUILayout.Label(rowFrozen ? "FROZEN" : string.Empty, GUILayout.Width(56f));
+            }
+
+            _statsInputBuffers[row.Key] = buffer;
+        }
+
+        private List<string> BuildVisibleStatsRowKeys(
+            List<EditableStatRow> vitalsRows,
+            List<EditableStatRow> needsRows,
+            List<EditableStatRow> mentalRows,
+            List<EditableStatRow> addictionsRows,
+            List<EditableStatRow> advancedRows)
+        {
+            List<string> keys = new(32);
+
+            AddSectionKeys(keys, _statsShowVitals, vitalsRows);
+            AddSectionKeys(keys, _statsShowNeeds, needsRows);
+            AddSectionKeys(keys, _statsShowMental, mentalRows);
+            AddSectionKeys(keys, _statsShowAddictions, addictionsRows);
+            AddSectionKeys(keys, _statsShowAdvanced, advancedRows);
+
+            return keys;
+        }
+
+        private static void AddSectionKeys(List<string> keys, bool sectionVisible, List<EditableStatRow> rows)
+        {
+            if (!sectionVisible || rows == null)
+                return;
+
+            for (int i = 0; i < rows.Count; i++)
+                keys.Add(rows[i].Key);
+        }
+
+        private static string FormatStatInput(float value)
+        {
+            return value.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatStatDisplay(float value, float min, float max, bool isPercentLike)
+        {
+            if (!isPercentLike || min != 0f || max != 100f)
+                return value.ToString("0.##", CultureInfo.InvariantCulture);
+
+            float clamped = Mathf.Clamp(value, 0f, 100f);
+            return $"{clamped:0.##}/100 ({Mathf.RoundToInt(clamped)}%)";
+        }
+
+        private static bool TryParseFloat(string text, out float value)
+        {
+            return float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+                || float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value);
         }
 
         private void DrawStatBar(string label, float value)
@@ -715,4 +1030,7 @@ namespace OpenSewer
         }
     }
 }
+
+
+
 

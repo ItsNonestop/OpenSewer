@@ -6,6 +6,8 @@ The mod keeps gameplay hooks simple:
 - Open/close menu with `U`
 - In Item Spawner, `LMB` spawns one item
 - `RMB` opens amount picker
+- MAIN tab shows read-only player stats overview
+- STATS tab provides live stat editing controls (core needs + addictions) with per-stat freezing
 
 ## Requirements
 
