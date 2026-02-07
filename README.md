@@ -75,6 +75,13 @@ Common issues:
 
 ---
 
+## References
+Massive thank you to Github user [ShiggityShaggs](https://github.com/shiggityshaggs), his repositories for both 
+[ObenseuerItemCodex](https://github.com/shiggityshaggs/ObenseuerItemCodex)
+&
+[ObenseuerFurnitureCodex](https://github.com/shiggityshaggs/ObenseuerFurnitureCodex)
+have both helped massively in saving time in implimentation of Item & Furniture Spawning within the menu and making sure Item/Furniture images aligned correctly with item
+
 ## Contributing
 
 See `CONTRIBUTING.md`.
