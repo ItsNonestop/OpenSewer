@@ -13,6 +13,7 @@ namespace OpenSewer
         {
             Main,
             ItemSpawner,
+            FurnitureSpawner,
             Stats
         }
         const bool DEBUG_LAYOUT = false;
@@ -286,6 +287,10 @@ namespace OpenSewer
                     DrawSpawnerBody3Column();
                     using (new GUILayout.HorizontalScope()) { Footer(); }
                     break;
+                case ModTab.FurnitureSpawner:
+                    DrawFurnitureHeaderRow();
+                    DrawFurnitureBody3Column();
+                    break;
                 case ModTab.Stats:
                     DrawStatsTab();
                     break;
@@ -303,6 +308,9 @@ namespace OpenSewer
 
                 if (GUILayout.Button("ITEM SPAWNER", _currentTab == ModTab.ItemSpawner ? selectedTabStyle : unselectedTabStyle, GUILayout.Height(28)))
                     _currentTab = ModTab.ItemSpawner;
+
+                if (GUILayout.Button("FURNITURE SPAWNER", _currentTab == ModTab.FurnitureSpawner ? selectedTabStyle : unselectedTabStyle, GUILayout.Height(28)))
+                    _currentTab = ModTab.FurnitureSpawner;
 
                 if (GUILayout.Button("STATS", _currentTab == ModTab.Stats ? selectedTabStyle : unselectedTabStyle, GUILayout.Height(28)))
                     _currentTab = ModTab.Stats;
