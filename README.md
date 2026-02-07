@@ -65,6 +65,16 @@ Common issues:
    - `BepInEx/plugins/OpenSewer/OpenSewer.dll`
 5. Publish GitHub release notes with version + install steps.
 
+---
+
+<img width="1243" height="784" alt="MAIN" src="https://github.com/user-attachments/assets/d59833da-1357-41d7-886d-3b3f0f372dd8" />
+<img width="1127" height="620" alt="ITEM" src="https://github.com/user-attachments/assets/435fc3ae-c66c-4638-8a41-ca3d3ffb9b65" />
+<img width="1137" height="624" alt="FURNITURE" src="https://github.com/user-attachments/assets/7915f82d-9287-4395-b348-91b3ec005a52" />
+<img width="1197" height="601" alt="STATS" src="https://github.com/user-attachments/assets/eb253b0a-c2e3-4de4-a95f-f0d6c169b00a" />
+
+
+---
+
 ## Contributing
 
 See `CONTRIBUTING.md`.
