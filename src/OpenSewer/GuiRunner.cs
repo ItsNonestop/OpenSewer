@@ -1,7 +1,9 @@
 using OpenSewer.Utility;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -40,12 +42,56 @@ namespace OpenSewer
             public Item BoundItem;
         }
 
+        private sealed class CategoryCellRef
+        {
+            public UIButton Button;
+            public TMP_Text Label;
+            public string Category;
+        }
+
+#pragma warning disable CS0649 // Populated by Unity JsonUtility
+        [Serializable]
+        private sealed class ItemJsonRoot
+        {
+            public ItemJsonEntry[] Items;
+        }
+
+        [Serializable]
+        private sealed class ItemJsonEntry
+        {
+            public int ID;
+            public string Title;
+            public string[] Categories;
+            public string Description;
+            public int BaseValue;
+        }
+#pragma warning restore CS0649
+
+        private enum ItemDetailsSourceMode
+        {
+            RuntimeOnly,
+            HybridRuntimeJson
+        }
+
+        private sealed class ItemDetails
+        {
+            public string Name;
+            public string Category;
+            public string Description;
+            public int? EstimatedValue;
+            public int QuantityBadge;
+            public int StackSize;
+        }
+
         private readonly Dictionary<string, Sprite> _spriteCache = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<TabRef> _tabs = new();
         private readonly Dictionary<MenuTab, GameObject> _pages = new();
         private readonly List<ItemCellRef> _itemCells = new();
         private readonly HashSet<string> _excludedItemCategories = new(StringComparer.OrdinalIgnoreCase) { "Liquid", "ItemGroup" };
         private readonly List<Item> _filteredItems = new();
+        private readonly List<string> _itemCategoryOptions = new();
+        private readonly List<string> _filteredCategoryOptions = new();
+        private readonly List<CategoryCellRef> _categoryCells = new();
 
         private GameObject _root;
         private MenuTab _activeTab = MenuTab.Main;
@@ -54,13 +100,27 @@ namespace OpenSewer
         private TMP_InputField _itemSearchInput;
         private TMP_InputField _itemAmountInput;
         private TMP_InputField _itemCategoryInput;
-        private TMP_Text _itemSelectedTitleText;
-        private TMP_Text _itemSelectedDetailsText;
         private TMP_Text _itemListInfoText;
+        private UIImage _itemDetailsIcon;
+        private TMP_Text _itemDetailsQuantityBadgeText;
+        private GameObject _itemDetailsQuantityBadgeRoot;
+        private TMP_Text _itemDetailsNameText;
+        private TMP_Text _itemDetailsCategoryText;
+        private TMP_Text _itemDetailsDescriptionText;
+        private TMP_Text _itemDetailsStackSizeText;
+        private TMP_Text _itemDetailsValueText;
+        private GameObject _itemDetailsContentRoot;
         private RectTransform _itemGridHoverRegion;
+        private RectTransform _categoryListHoverRegion;
+        private GameObject _categoryBrowserPanel;
         private Item _selectedItem;
         private int _itemScrollStartIndex;
+        private int _categoryScrollStartIndex;
+        private bool _categoryBrowserVisible;
         private bool _visible;
+        private bool _itemDetailsSourceInitialized;
+        private ItemDetailsSourceMode _itemDetailsSourceMode = ItemDetailsSourceMode.RuntimeOnly;
+        private Dictionary<int, ItemJsonEntry> _itemJsonLookup;
 
         public void Show()
         {
@@ -111,6 +171,7 @@ namespace OpenSewer
             }
 
             HandleItemsScrollInput();
+            HandleCategoryScrollInput();
         }
 
         private void BuildIfNeeded()
@@ -247,7 +308,12 @@ namespace OpenSewer
             var page = NewUI("ItemsPage", parent);
             Stretch(RT(page));
             _itemCells.Clear();
+            _categoryCells.Clear();
+            _itemCategoryOptions.Clear();
+            _filteredCategoryOptions.Clear();
             _selectedItem = null;
+            _categoryScrollStartIndex = 0;
+            _categoryBrowserVisible = false;
 
             const int itemGridColumns = 5;
             const int itemGridVisibleRows = 8;
@@ -368,6 +434,87 @@ namespace OpenSewer
             infoEmpty.offsetMin = new Vector2(20f, 20f);
             infoEmpty.offsetMax = new Vector2(-20f, -20f);
 
+            RectTransform detailsRoot = NewUI("SelectedItemDetails", infoEmpty).GetComponent<RectTransform>();
+            Stretch(detailsRoot);
+            detailsRoot.offsetMin = new Vector2(12f, 10f);
+            detailsRoot.offsetMax = new Vector2(-12f, -10f);
+            _itemDetailsContentRoot = detailsRoot.gameObject;
+
+            RectTransform iconSlot = NewPanelWithSprite(detailsRoot, "SelectedIconSlot", "slot_001", Color.white, Image.Type.Sliced);
+            iconSlot.anchorMin = new Vector2(0f, 1f);
+            iconSlot.anchorMax = new Vector2(0f, 1f);
+            iconSlot.pivot = new Vector2(0f, 1f);
+            iconSlot.anchoredPosition = new Vector2(0f, 0f);
+            iconSlot.sizeDelta = new Vector2(76f, 76f);
+
+            _itemDetailsIcon = NewUI("SelectedIcon", iconSlot).AddComponent<UIImage>();
+            _itemDetailsIcon.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            _itemDetailsIcon.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            _itemDetailsIcon.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            _itemDetailsIcon.rectTransform.anchoredPosition = Vector2.zero;
+            _itemDetailsIcon.rectTransform.sizeDelta = new Vector2(56f, 56f);
+            _itemDetailsIcon.preserveAspect = true;
+            _itemDetailsIcon.enabled = false;
+            _itemDetailsIcon.raycastTarget = false;
+
+            RectTransform qtyBadge = NewPanelWithSprite(iconSlot, "QuantityBadge", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            qtyBadge.anchorMin = new Vector2(1f, 0f);
+            qtyBadge.anchorMax = new Vector2(1f, 0f);
+            qtyBadge.pivot = new Vector2(1f, 0f);
+            qtyBadge.anchoredPosition = new Vector2(6f, -6f);
+            qtyBadge.sizeDelta = new Vector2(42f, 20f);
+            _itemDetailsQuantityBadgeRoot = qtyBadge.gameObject;
+            _itemDetailsQuantityBadgeText = NewText(qtyBadge, string.Empty, 12, TextAlignmentOptions.Center, Color.white);
+            _itemDetailsQuantityBadgeText.enableWordWrapping = false;
+
+            RectTransform textRoot = NewUI("SelectedTextRoot", detailsRoot).GetComponent<RectTransform>();
+            textRoot.anchorMin = new Vector2(0f, 0f);
+            textRoot.anchorMax = new Vector2(1f, 1f);
+            textRoot.pivot = new Vector2(0f, 1f);
+            textRoot.offsetMin = new Vector2(90f, 0f);
+            textRoot.offsetMax = Vector2.zero;
+
+            _itemDetailsNameText = NewText(textRoot, "Select an item", 16, TextAlignmentOptions.TopLeft, Color.white);
+            _itemDetailsNameText.rectTransform.anchorMin = new Vector2(0f, 1f);
+            _itemDetailsNameText.rectTransform.anchorMax = new Vector2(1f, 1f);
+            _itemDetailsNameText.rectTransform.pivot = new Vector2(0f, 1f);
+            _itemDetailsNameText.rectTransform.anchoredPosition = Vector2.zero;
+            _itemDetailsNameText.rectTransform.sizeDelta = new Vector2(0f, 24f);
+            _itemDetailsNameText.enableWordWrapping = false;
+
+            _itemDetailsCategoryText = NewText(textRoot, "Category: -", 12, TextAlignmentOptions.TopLeft, new Color(0.84f, 0.84f, 0.84f, 1f));
+            _itemDetailsCategoryText.rectTransform.anchorMin = new Vector2(0f, 1f);
+            _itemDetailsCategoryText.rectTransform.anchorMax = new Vector2(1f, 1f);
+            _itemDetailsCategoryText.rectTransform.pivot = new Vector2(0f, 1f);
+            _itemDetailsCategoryText.rectTransform.anchoredPosition = new Vector2(0f, -24f);
+            _itemDetailsCategoryText.rectTransform.sizeDelta = new Vector2(0f, 20f);
+            _itemDetailsCategoryText.enableWordWrapping = false;
+
+            _itemDetailsDescriptionText = NewText(textRoot, "Description: -", 12, TextAlignmentOptions.TopLeft, new Color(0.9f, 0.9f, 0.9f, 1f));
+            _itemDetailsDescriptionText.rectTransform.anchorMin = new Vector2(0f, 0f);
+            _itemDetailsDescriptionText.rectTransform.anchorMax = new Vector2(1f, 1f);
+            _itemDetailsDescriptionText.rectTransform.pivot = new Vector2(0f, 1f);
+            _itemDetailsDescriptionText.rectTransform.offsetMin = new Vector2(0f, 36f);
+            _itemDetailsDescriptionText.rectTransform.offsetMax = new Vector2(0f, -50f);
+            _itemDetailsDescriptionText.enableWordWrapping = true;
+            _itemDetailsDescriptionText.overflowMode = TextOverflowModes.Truncate;
+
+            _itemDetailsStackSizeText = NewText(textRoot, "Stack size: -", 12, TextAlignmentOptions.BottomLeft, new Color(0.86f, 0.86f, 0.86f, 1f));
+            _itemDetailsStackSizeText.rectTransform.anchorMin = new Vector2(0f, 0f);
+            _itemDetailsStackSizeText.rectTransform.anchorMax = new Vector2(1f, 0f);
+            _itemDetailsStackSizeText.rectTransform.pivot = new Vector2(0f, 0f);
+            _itemDetailsStackSizeText.rectTransform.anchoredPosition = new Vector2(0f, 18f);
+            _itemDetailsStackSizeText.rectTransform.sizeDelta = new Vector2(0f, 18f);
+            _itemDetailsStackSizeText.enableWordWrapping = false;
+
+            _itemDetailsValueText = NewText(textRoot, "Estimated value: -", 12, TextAlignmentOptions.BottomLeft, new Color(0.86f, 0.86f, 0.86f, 1f));
+            _itemDetailsValueText.rectTransform.anchorMin = new Vector2(0f, 0f);
+            _itemDetailsValueText.rectTransform.anchorMax = new Vector2(1f, 0f);
+            _itemDetailsValueText.rectTransform.pivot = new Vector2(0f, 0f);
+            _itemDetailsValueText.rectTransform.anchoredPosition = Vector2.zero;
+            _itemDetailsValueText.rectTransform.sizeDelta = new Vector2(0f, 18f);
+            _itemDetailsValueText.enableWordWrapping = false;
+
             RectTransform rightPanel = NewPanelWithSprite(page.transform, "RightPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
             rightPanel.anchorMin = new Vector2(0f, 0f);
             rightPanel.anchorMax = new Vector2(1f, 1f);
@@ -405,26 +552,38 @@ namespace OpenSewer
             _itemSearchInput.onValueChanged.AddListener(_ => RefreshItemList());
             _itemSearchInput.characterLimit = 48;
 
-            _itemCategoryInput = BuildInputRow(controls.transform, "Category filter (optional)");
-            _itemCategoryInput.onValueChanged.AddListener(_ => RefreshItemList());
+            var categoryRow = NewUI("CategoryRow", controls.transform);
+            var categoryLayout = categoryRow.AddComponent<HorizontalLayoutGroup>();
+            categoryLayout.spacing = 6f;
+            categoryLayout.childControlWidth = true;
+            categoryLayout.childControlHeight = true;
+            categoryLayout.childForceExpandWidth = false;
+            categoryLayout.childForceExpandHeight = false;
+            categoryRow.AddComponent<LayoutElement>().preferredHeight = 34f;
+
+            _itemCategoryInput = BuildInputRow(categoryRow.transform, "Category filter (optional)");
+            _itemCategoryInput.onValueChanged.AddListener(_ =>
+            {
+                _categoryScrollStartIndex = 0;
+                RefreshItemList();
+            });
             _itemCategoryInput.characterLimit = 32;
+            var categoryInputLe = _itemCategoryInput.gameObject.GetComponent<LayoutElement>();
+            categoryInputLe.flexibleWidth = 1f;
+            categoryInputLe.preferredWidth = 0f;
+
+            BuildInlineButton(categoryRow.transform, "Browse", ToggleCategoryBrowser, 92f, 34f);
+            BuildInlineButton(categoryRow.transform, "Clear", ClearCategoryFilter, 84f, 34f);
 
             _itemListInfoText = NewText(controls.transform, "Showing: 0", 12, TextAlignmentOptions.Left, new Color(0.8f, 0.8f, 0.8f, 1f));
             PrepareRectForLayout(_itemListInfoText.rectTransform);
             _itemListInfoText.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
 
-            _itemSelectedTitleText = NewText(controls.transform, "Selected: none", 14, TextAlignmentOptions.Left, Color.white);
-            PrepareRectForLayout(_itemSelectedTitleText.rectTransform);
-            _itemSelectedTitleText.gameObject.AddComponent<LayoutElement>().preferredHeight = 26f;
-
-            _itemSelectedDetailsText = NewText(controls.transform, "ID: - | Stack: -", 12, TextAlignmentOptions.Left, new Color(0.8f, 0.8f, 0.8f, 1f));
-            PrepareRectForLayout(_itemSelectedDetailsText.rectTransform);
-            _itemSelectedDetailsText.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
-
             _itemAmountInput = BuildInputRow(controls.transform, "Amount");
             _itemAmountInput.text = "1";
             _itemAmountInput.contentType = TMP_InputField.ContentType.IntegerNumber;
             _itemAmountInput.characterLimit = 5;
+            _itemAmountInput.onValueChanged.AddListener(_ => UpdateSelectedItemUi());
 
             var actionRowA = NewUI("ActionRowA", controls.transform);
             var hA = actionRowA.AddComponent<HorizontalLayoutGroup>();
@@ -450,6 +609,61 @@ namespace OpenSewer
             bottomInfo.offsetMin = new Vector2(18f, 18f);
             bottomInfo.offsetMax = new Vector2(-18f, -432f);
 
+            RectTransform categoryBrowser = NewPanelWithSprite(bottomInfo, "CategoryBrowser", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            Stretch(categoryBrowser);
+            categoryBrowser.offsetMin = new Vector2(12f, 12f);
+            categoryBrowser.offsetMax = new Vector2(-12f, -12f);
+            _categoryBrowserPanel = categoryBrowser.gameObject;
+            _categoryBrowserPanel.SetActive(false);
+
+            TMP_Text categoryHeader = NewText(categoryBrowser, "CATEGORIES", 14, TextAlignmentOptions.TopLeft, Color.white);
+            categoryHeader.rectTransform.offsetMin = new Vector2(12f, 0f);
+            categoryHeader.rectTransform.offsetMax = new Vector2(0f, -12f);
+
+            RectTransform categoryBody = NewPanelWithSprite(categoryBrowser, "CategoryBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            categoryBody.anchorMin = new Vector2(0f, 0f);
+            categoryBody.anchorMax = new Vector2(1f, 1f);
+            categoryBody.offsetMin = new Vector2(10f, 10f);
+            categoryBody.offsetMax = new Vector2(-10f, -36f);
+
+            var categoryViewport = NewUI("CategoryViewport", categoryBody);
+            _categoryListHoverRegion = RT(categoryViewport);
+            Stretch(_categoryListHoverRegion);
+            categoryViewport.AddComponent<RectMask2D>();
+
+            var categoryList = NewUI("CategoryList", categoryViewport.transform);
+            Stretch(RT(categoryList));
+            var categoryListLayout = categoryList.AddComponent<VerticalLayoutGroup>();
+            categoryListLayout.spacing = 4f;
+            categoryListLayout.childControlWidth = true;
+            categoryListLayout.childControlHeight = true;
+            categoryListLayout.childForceExpandWidth = true;
+            categoryListLayout.childForceExpandHeight = false;
+            categoryListLayout.padding = new RectOffset(4, 4, 4, 4);
+
+            for (int i = 0; i < 9; i++)
+            {
+                RectTransform rowRt = NewPanelWithSprite(categoryList.transform, $"CategoryCell{i}", "main_UI_background_002", Color.white, Image.Type.Sliced);
+                rowRt.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
+                UIButton rowBtn = rowRt.gameObject.AddComponent<UIButton>();
+                rowBtn.transition = Selectable.Transition.None;
+
+                TMP_Text rowTxt = NewText(rowRt, string.Empty, 13, TextAlignmentOptions.MidlineLeft, Color.white);
+                rowTxt.rectTransform.offsetMin = new Vector2(10f, 0f);
+                rowTxt.rectTransform.offsetMax = new Vector2(-10f, 0f);
+
+                var cell = new CategoryCellRef
+                {
+                    Button = rowBtn,
+                    Label = rowTxt,
+                    Category = null
+                };
+
+                int idx = i;
+                rowBtn.onClick.AddListener(() => OnCategoryCellClicked(idx));
+                _categoryCells.Add(cell);
+            }
+
             var footer = NewUI("Footer", page.transform);
             var footerRt = RT(footer);
             footerRt.anchorMin = new Vector2(0f, 0f);
@@ -463,6 +677,7 @@ namespace OpenSewer
             _statusText.rectTransform.offsetMin = new Vector2(0f, -16f);
 
             RefreshItemList();
+            RefreshCategoryBrowserList();
             return page;
         }
 
@@ -639,6 +854,7 @@ namespace OpenSewer
 
             ApplyItemCells();
             UpdateSelectedItemUi();
+            RefreshCategoryBrowserList();
         }
 
         private void ApplyItemCells()
@@ -699,19 +915,348 @@ namespace OpenSewer
 
         private void UpdateSelectedItemUi()
         {
-            if (_itemSelectedTitleText == null || _itemSelectedDetailsText == null)
+            if (_itemDetailsNameText == null || _itemDetailsDescriptionText == null)
                 return;
 
             if (_selectedItem == null)
             {
-                _itemSelectedTitleText.text = "Selected: none";
-                _itemSelectedDetailsText.text = "ID: - | Stack: -";
+                if (_itemDetailsContentRoot != null)
+                    _itemDetailsContentRoot.SetActive(false);
+                if (_itemDetailsIcon != null)
+                    _itemDetailsIcon.enabled = false;
+                if (_itemDetailsQuantityBadgeText != null)
+                    _itemDetailsQuantityBadgeText.text = string.Empty;
+                if (_itemDetailsQuantityBadgeRoot != null)
+                    _itemDetailsQuantityBadgeRoot.SetActive(false);
+                if (_itemDetailsNameText != null)
+                    _itemDetailsNameText.text = "Select an item";
+                if (_itemDetailsCategoryText != null)
+                    _itemDetailsCategoryText.text = "Category: -";
+                if (_itemDetailsDescriptionText != null)
+                    _itemDetailsDescriptionText.text = "Description: -";
+                if (_itemDetailsStackSizeText != null)
+                    _itemDetailsStackSizeText.text = "Stack size: -";
+                if (_itemDetailsValueText != null)
+                    _itemDetailsValueText.text = "Estimated value: -";
                 return;
             }
 
-            _itemSelectedTitleText.text = $"Selected: {_selectedItem.Title}";
-            int stack = Mathf.Max(1, _selectedItem.Stackable);
-            _itemSelectedDetailsText.text = $"ID: {_selectedItem.ID} | Stack: {stack}";
+            if (_itemDetailsContentRoot != null)
+                _itemDetailsContentRoot.SetActive(true);
+            EnsureItemDetailsSourceInitialized();
+            ItemDetails details = ResolveItemDetails(_selectedItem);
+
+            if (_itemDetailsIcon != null)
+            {
+                Sprite sprite = _selectedItem.Appearance?.Sprite;
+                if (sprite != null)
+                {
+                    _itemDetailsIcon.sprite = sprite;
+                    _itemDetailsIcon.overrideSprite = sprite;
+                    _itemDetailsIcon.type = Image.Type.Simple;
+                    _itemDetailsIcon.enabled = true;
+                }
+                else
+                {
+                    _itemDetailsIcon.enabled = false;
+                }
+            }
+
+            bool hasOwnedAmount = details.QuantityBadge > 0;
+            if (_itemDetailsQuantityBadgeRoot != null)
+                _itemDetailsQuantityBadgeRoot.SetActive(hasOwnedAmount);
+            if (_itemDetailsQuantityBadgeText != null)
+                _itemDetailsQuantityBadgeText.text = hasOwnedAmount ? details.QuantityBadge.ToString() : string.Empty;
+            if (_itemDetailsNameText != null)
+                _itemDetailsNameText.text = details.Name;
+            if (_itemDetailsCategoryText != null)
+                _itemDetailsCategoryText.text = $"Category: {details.Category}";
+            if (_itemDetailsDescriptionText != null)
+                _itemDetailsDescriptionText.text = $"Description: {details.Description}";
+            if (_itemDetailsStackSizeText != null)
+                _itemDetailsStackSizeText.text = $"Stack size: {details.StackSize}";
+            if (_itemDetailsValueText != null)
+                _itemDetailsValueText.text = details.EstimatedValue.HasValue
+                    ? $"Estimated value: {details.EstimatedValue.Value}"
+                    : "Estimated value: -";
+        }
+
+        private ItemDetails ResolveItemDetails(Item item)
+        {
+            string runtimeName = NormalizeText(item?.Title);
+            string runtimeCategory = NormalizeText(GetRuntimeCategory(item));
+            string runtimeDescription = NormalizeText(item?.Description);
+            int runtimeValue = item != null ? Mathf.Max(0, item.Value) : 0;
+            bool hasRuntimeValue = runtimeValue > 0;
+
+            ItemJsonEntry json = null;
+            bool shouldCheckJson = _itemDetailsSourceMode == ItemDetailsSourceMode.HybridRuntimeJson &&
+                (string.IsNullOrEmpty(runtimeName) || string.IsNullOrEmpty(runtimeCategory) || string.IsNullOrEmpty(runtimeDescription) || !hasRuntimeValue);
+            if (shouldCheckJson)
+                json = TryGetItemJson(item?.ID ?? -1);
+
+            string name = runtimeName ?? NormalizeText(json?.Title) ?? $"Item #{item?.ID ?? -1}";
+            string category = runtimeCategory ?? NormalizeText(json?.Categories?.FirstOrDefault()) ?? "Uncategorized";
+            string description = runtimeDescription ?? NormalizeText(json?.Description) ?? "No description available.";
+            int? estimatedValue = hasRuntimeValue
+                ? runtimeValue
+                : (json != null && json.BaseValue > 0 ? json.BaseValue : (int?)null);
+
+            int quantityBadge = GetQuantityBadgeAmount(item);
+            int stackSize = item != null ? Mathf.Max(1, item.Stackable) : 1;
+            return new ItemDetails
+            {
+                Name = name,
+                Category = category,
+                Description = description,
+                EstimatedValue = estimatedValue,
+                QuantityBadge = quantityBadge,
+                StackSize = stackSize
+            };
+        }
+
+        private void EnsureItemDetailsSourceInitialized()
+        {
+            if (_itemDetailsSourceInitialized)
+                return;
+
+            _itemDetailsSourceInitialized = true;
+            var sampleItems = ItemHandler.Items.Where(i => i != null).Take(5).ToList();
+            if (sampleItems.Count == 0)
+            {
+                _itemDetailsSourceMode = ItemDetailsSourceMode.HybridRuntimeJson;
+                EnsureItemJsonLookupLoaded();
+                Plugin.DLog("Item details source: no runtime samples; enabling JSON fallback.");
+                return;
+            }
+
+            bool runtimeComplete = sampleItems.All(i =>
+                !string.IsNullOrWhiteSpace(i.Title) &&
+                !string.IsNullOrWhiteSpace(GetRuntimeCategory(i)) &&
+                !string.IsNullOrWhiteSpace(i.Description));
+
+            for (int i = 0; i < sampleItems.Count; i++)
+            {
+                Item sample = sampleItems[i];
+                string cat = NormalizeText(GetRuntimeCategory(sample)) ?? "-";
+                int descLen = string.IsNullOrWhiteSpace(sample.Description) ? 0 : sample.Description.Length;
+                Plugin.DLog($"Item details sample {i + 1}: ID={sample.ID}, title='{sample.Title}', category='{cat}', descLen={descLen}, value={sample.Value}");
+            }
+
+            if (runtimeComplete)
+            {
+                _itemDetailsSourceMode = ItemDetailsSourceMode.RuntimeOnly;
+                Plugin.DLog("Item details source selected: runtime-only.");
+            }
+            else
+            {
+                _itemDetailsSourceMode = ItemDetailsSourceMode.HybridRuntimeJson;
+                EnsureItemJsonLookupLoaded();
+                Plugin.DLog($"Item details source selected: hybrid runtime+json (json entries={_itemJsonLookup?.Count ?? 0}).");
+            }
+        }
+
+        private ItemJsonEntry TryGetItemJson(int itemId)
+        {
+            if (itemId < 0)
+                return null;
+
+            EnsureItemJsonLookupLoaded();
+            if (_itemJsonLookup == null)
+                return null;
+
+            _itemJsonLookup.TryGetValue(itemId, out ItemJsonEntry entry);
+            return entry;
+        }
+
+        private void EnsureItemJsonLookupLoaded()
+        {
+            if (_itemJsonLookup != null)
+                return;
+
+            _itemJsonLookup = new Dictionary<int, ItemJsonEntry>();
+            try
+            {
+                string itemsPath = Path.Combine(Application.dataPath, "StreamingAssets", "Items.json");
+                if (!File.Exists(itemsPath))
+                {
+                    Plugin.DLog($"Items.json missing at: {itemsPath}");
+                    return;
+                }
+
+                string rawJson = File.ReadAllText(itemsPath);
+                string wrapped = "{\"Items\":" + rawJson + "}";
+                ItemJsonRoot parsed = JsonUtility.FromJson<ItemJsonRoot>(wrapped);
+                if (parsed?.Items == null || parsed.Items.Length == 0)
+                {
+                    Plugin.DLog("Items.json parse returned empty item list.");
+                    return;
+                }
+
+                foreach (ItemJsonEntry entry in parsed.Items)
+                {
+                    if (entry == null)
+                        continue;
+                    _itemJsonLookup[entry.ID] = entry;
+                }
+
+                Plugin.DLog($"Items.json cache loaded: {_itemJsonLookup.Count} entries.");
+            }
+            catch (Exception ex)
+            {
+                Plugin.DLog($"Items.json load failed: {ex.GetType().Name} {ex.Message}");
+            }
+        }
+
+        private static string GetRuntimeCategory(Item item)
+        {
+            if (item == null)
+                return null;
+
+            if (!string.IsNullOrWhiteSpace(item.Category))
+                return item.Category;
+            if (item.Categories == null || item.Categories.Length == 0)
+                return null;
+            return item.Categories.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
+        }
+
+        private static int GetQuantityBadgeAmount(Item item)
+        {
+            if (item == null)
+                return 0;
+
+            BackpackStorage backpack = BackpackStorage.instance;
+            if (backpack == null)
+                return 0;
+
+            try
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                FieldInfo[] storageFields = backpack.GetType().GetFields(flags)
+                    .Where(f => typeof(Storage).IsAssignableFrom(f.FieldType))
+                    .ToArray();
+
+                int total = 0;
+                var seenStorageIds = new HashSet<int>();
+                for (int i = 0; i < storageFields.Length; i++)
+                {
+                    Storage storage = storageFields[i].GetValue(backpack) as Storage;
+                    if (storage == null)
+                        continue;
+                    if (!seenStorageIds.Add(storage.GetInstanceID()))
+                        continue;
+
+                    total += CountFromStorageItemData(storage, item.ID);
+                    if (total <= 0)
+                        total += CountFromStorageSlots(storage, item.ID);
+                }
+
+                return total;
+            }
+            catch (Exception ex)
+            {
+                Plugin.DLog($"GetQuantityBadgeAmount failed: {ex.GetType().Name}");
+                return 0;
+            }
+        }
+
+        private static int CountFromStorageItemData(Storage storage, int itemId)
+        {
+            if (storage == null || itemId < 0)
+                return 0;
+
+            try
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                MethodInfo getStorageItemData = storage.GetType().GetMethod("GetStorageItemData", flags);
+                if (getStorageItemData == null)
+                    return 0;
+
+                object rawList = getStorageItemData.Invoke(storage, null);
+                if (rawList is not System.Collections.IEnumerable list)
+                    return 0;
+
+                int total = 0;
+                foreach (object data in list)
+                {
+                    if (data == null)
+                        continue;
+
+                    Type dataType = data.GetType();
+                    PropertyInfo itemProp = dataType.GetProperty("item", flags);
+                    PropertyInfo amountProp = dataType.GetProperty("amount", flags);
+                    if (itemProp == null || amountProp == null)
+                        continue;
+
+                    Item dataItem = itemProp.GetValue(data, null) as Item;
+                    if (dataItem == null || dataItem.ID != itemId)
+                        continue;
+
+                    object rawAmount = amountProp.GetValue(data, null);
+                    if (rawAmount is int i)
+                        total += Mathf.Max(0, i);
+                    else if (rawAmount is float f)
+                        total += Mathf.Max(0, Mathf.RoundToInt(f));
+                }
+
+                return total;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static int CountFromStorageSlots(Storage storage, int itemId)
+        {
+            if (storage == null || itemId < 0)
+                return 0;
+
+            try
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                FieldInfo storageSlotsField = storage.GetType().GetField("storageSlots", flags);
+                if (storageSlotsField == null)
+                    return 0;
+
+                if (storageSlotsField.GetValue(storage) is not System.Collections.IEnumerable slots)
+                    return 0;
+
+                int total = 0;
+                foreach (object slot in slots)
+                {
+                    if (slot == null)
+                        continue;
+                    Type slotType = slot.GetType();
+                    FieldInfo idField = slotType.GetField("itemId", flags);
+                    FieldInfo amountField = slotType.GetField("itemAmount", flags);
+                    if (idField == null || amountField == null)
+                        continue;
+
+                    object rawId = idField.GetValue(slot);
+                    object rawAmount = amountField.GetValue(slot);
+                    if (rawId is not int id || id != itemId)
+                        continue;
+
+                    if (rawAmount is int amount)
+                        total += Mathf.Max(0, amount);
+                    else if (rawAmount is float f)
+                        total += Mathf.Max(0, Mathf.RoundToInt(f));
+                }
+
+                return total;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static string NormalizeText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return null;
+            return text.Trim();
         }
 
         private void SpawnSelectedOne()
@@ -787,6 +1332,8 @@ namespace OpenSewer
                 }
 
                 SetStatus($"Spawned {requested}x {item.Title}");
+                if (ReferenceEquals(item, _selectedItem))
+                    UpdateSelectedItemUi();
             }
             catch (Exception ex)
             {
@@ -829,6 +1376,23 @@ namespace OpenSewer
             ApplyItemCells();
         }
 
+        private void HandleCategoryScrollInput()
+        {
+            if (_activeTab != MenuTab.Items || !_categoryBrowserVisible || _categoryListHoverRegion == null || _filteredCategoryOptions.Count <= _categoryCells.Count)
+                return;
+
+            if (!RectTransformUtility.RectangleContainsScreenPoint(_categoryListHoverRegion, Input.mousePosition, null))
+                return;
+
+            float wheel = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(wheel) < 0.01f)
+                return;
+
+            _categoryScrollStartIndex += wheel > 0f ? -1 : 1;
+            _categoryScrollStartIndex = Mathf.Clamp(_categoryScrollStartIndex, 0, Mathf.Max(0, _filteredCategoryOptions.Count - _categoryCells.Count));
+            ApplyCategoryCells();
+        }
+
         private void UpdateItemListInfo()
         {
             if (_itemListInfoText == null)
@@ -843,6 +1407,112 @@ namespace OpenSewer
             int start = _itemScrollStartIndex + 1;
             int end = Mathf.Min(_itemScrollStartIndex + _itemCells.Count, _filteredItems.Count);
             _itemListInfoText.text = $"Showing: {start}-{end} of {_filteredItems.Count}";
+        }
+
+        private void EnsureItemCategoryOptions()
+        {
+            if (_itemCategoryOptions.Count > 0)
+                return;
+
+            _itemCategoryOptions.Add("All");
+            if (ItemDatabase.instance == null || ItemDatabase.database == null)
+                return;
+
+            foreach (string category in ItemHandler.Categories)
+            {
+                if (string.IsNullOrWhiteSpace(category) || _excludedItemCategories.Contains(category))
+                    continue;
+                _itemCategoryOptions.Add(category);
+            }
+        }
+
+        private void RefreshCategoryBrowserList()
+        {
+            EnsureItemCategoryOptions();
+            _filteredCategoryOptions.Clear();
+            if (_itemCategoryOptions.Count == 0)
+            {
+                ApplyCategoryCells();
+                return;
+            }
+
+            string q = (_itemCategoryInput?.text ?? string.Empty).Trim();
+            IEnumerable<string> categories = _itemCategoryOptions;
+            if (!string.IsNullOrEmpty(q))
+            {
+                categories = categories.Where(c => c.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            _filteredCategoryOptions.AddRange(categories);
+            _categoryScrollStartIndex = Mathf.Clamp(_categoryScrollStartIndex, 0, Mathf.Max(0, _filteredCategoryOptions.Count - _categoryCells.Count));
+            ApplyCategoryCells();
+        }
+
+        private void ApplyCategoryCells()
+        {
+            for (int i = 0; i < _categoryCells.Count; i++)
+            {
+                int dataIndex = _categoryScrollStartIndex + i;
+                string category = dataIndex < _filteredCategoryOptions.Count ? _filteredCategoryOptions[dataIndex] : null;
+                CategoryCellRef cell = _categoryCells[i];
+                cell.Category = category;
+
+                if (string.IsNullOrEmpty(category))
+                {
+                    cell.Label.text = string.Empty;
+                    cell.Button.interactable = false;
+                }
+                else
+                {
+                    cell.Label.text = category;
+                    cell.Button.interactable = true;
+                }
+            }
+        }
+
+        private void OnCategoryCellClicked(int index)
+        {
+            if (index < 0 || index >= _categoryCells.Count)
+                return;
+
+            string category = _categoryCells[index].Category;
+            if (string.IsNullOrEmpty(category))
+                return;
+
+            if (_itemCategoryInput != null)
+                _itemCategoryInput.text = string.Equals(category, "All", StringComparison.OrdinalIgnoreCase) ? string.Empty : category;
+
+            _categoryBrowserVisible = false;
+            if (_categoryBrowserPanel != null)
+                _categoryBrowserPanel.SetActive(false);
+
+            SetStatus(string.Equals(category, "All", StringComparison.OrdinalIgnoreCase)
+                ? "Category filter cleared."
+                : $"Category set: {category}");
+        }
+
+        private void ToggleCategoryBrowser()
+        {
+            _categoryBrowserVisible = !_categoryBrowserVisible;
+            if (_categoryBrowserPanel != null)
+                _categoryBrowserPanel.SetActive(_categoryBrowserVisible);
+
+            if (_categoryBrowserVisible)
+            {
+                _categoryScrollStartIndex = 0;
+                RefreshCategoryBrowserList();
+            }
+        }
+
+        private void ClearCategoryFilter()
+        {
+            if (_itemCategoryInput == null)
+                return;
+
+            _itemCategoryInput.text = string.Empty;
+            _categoryScrollStartIndex = 0;
+            RefreshCategoryBrowserList();
+            SetStatus("Category filter cleared.");
         }
 
         private GameObject BuildPlaceholderPage(Transform parent, string label)
