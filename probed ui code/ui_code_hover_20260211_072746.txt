@@ -1,0 +1,187 @@
+﻿OpenSewer UI C# Reference Dump | 2026-02-11 07:27:46
+Scene: Open Sewer Tenement
+Root: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)
+MaxDepth: 6
+
+// Generated reference: adapt naming/layout/style to your real implementation.
+
+var SlotClone = new GameObject("Slot(Clone)", typeof(RectTransform));
+// root
+var SlotCloneRt = SlotClone.GetComponent<RectTransform>();
+SlotCloneRt.anchorMin = new Vector2(0f, 1f);
+SlotCloneRt.anchorMax = new Vector2(0f, 1f);
+SlotCloneRt.pivot = new Vector2(0.5f, 0.5f);
+SlotCloneRt.anchoredPosition = new Vector2(113.5f, -463.5f);
+SlotCloneRt.sizeDelta = new Vector2(69f, 69f);
+// Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)
+// Component: UnityEngine.CanvasRenderer
+// Component: UnityEngine.UI.Image
+// color = Color(1, 1, 1, 0)
+// sprite = Sprite(slot_001)
+// overrideSprite = Sprite(slot_001)
+// material = Material(Default UI Material)
+// raycastTarget = True
+// type = Simple
+// fillMethod = Radial360
+// fillAmount = 1
+// preserveAspect = False
+// Component: Slot
+// Component: UnityEngine.UI.Outline
+
+    var Padding = new GameObject("Padding", typeof(RectTransform));
+    Padding.transform.SetParent(SlotClone.transform, false);
+    var PaddingRt = Padding.GetComponent<RectTransform>();
+    PaddingRt.anchorMin = new Vector2(0f, 0f);
+    PaddingRt.anchorMax = new Vector2(1f, 1f);
+    PaddingRt.pivot = new Vector2(0.5f, 0.5f);
+    PaddingRt.anchoredPosition = new Vector2(0f, 0f);
+    PaddingRt.sizeDelta = new Vector2(-14f, -14f);
+    // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding
+
+        var Background = new GameObject("Background", typeof(RectTransform));
+        Background.transform.SetParent(Padding.transform, false);
+        var BackgroundRt = Background.GetComponent<RectTransform>();
+        BackgroundRt.anchorMin = new Vector2(0f, 0f);
+        BackgroundRt.anchorMax = new Vector2(1f, 1f);
+        BackgroundRt.pivot = new Vector2(0.5f, 0.5f);
+        BackgroundRt.anchoredPosition = new Vector2(0f, 0f);
+        BackgroundRt.sizeDelta = new Vector2(0f, 0f);
+        // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/Background
+        // Component: UnityEngine.CanvasRenderer
+        // Component: UnityEngine.UI.Image
+        // color = Color(1, 1, 1, 1)
+        // sprite = Sprite(slot_001)
+        // overrideSprite = Sprite(slot_001)
+        // material = Material(Default UI Material)
+        // raycastTarget = False
+        // type = Simple
+        // fillMethod = Radial360
+        // fillAmount = 1
+        // preserveAspect = False
+        // Component: UnityEngine.UI.Outline
+
+        var ItemPosition = new GameObject("ItemPosition", typeof(RectTransform));
+        ItemPosition.transform.SetParent(Padding.transform, false);
+        var ItemPositionRt = ItemPosition.GetComponent<RectTransform>();
+        ItemPositionRt.anchorMin = new Vector2(0f, 0f);
+        ItemPositionRt.anchorMax = new Vector2(1f, 1f);
+        ItemPositionRt.pivot = new Vector2(0.5f, 0.5f);
+        ItemPositionRt.anchoredPosition = new Vector2(0f, 0f);
+        ItemPositionRt.sizeDelta = new Vector2(0f, 0f);
+        // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/ItemPosition
+
+        var HotkeyNumber = new GameObject("HotkeyNumber", typeof(RectTransform));
+        HotkeyNumber.transform.SetParent(Padding.transform, false);
+        var HotkeyNumberRt = HotkeyNumber.GetComponent<RectTransform>();
+        HotkeyNumberRt.anchorMin = new Vector2(0f, 1f);
+        HotkeyNumberRt.anchorMax = new Vector2(0f, 1f);
+        HotkeyNumberRt.pivot = new Vector2(0f, 1f);
+        HotkeyNumberRt.anchoredPosition = new Vector2(0f, 0f);
+        HotkeyNumberRt.sizeDelta = new Vector2(20f, 20f);
+        // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/HotkeyNumber
+        // Component: UnityEngine.CanvasRenderer
+        // Component: UnityEngine.UI.Image
+        // color = Color(1, 1, 1, 1)
+        // sprite = Sprite(slot_number_001)
+        // overrideSprite = Sprite(slot_number_001)
+        // material = Material(Default UI Material)
+        // raycastTarget = True
+        // type = Simple
+        // fillMethod = Radial360
+        // fillAmount = 1
+        // preserveAspect = False
+
+            var HotkeyNumberText = new GameObject("HotkeyNumberText", typeof(RectTransform));
+            HotkeyNumberText.transform.SetParent(HotkeyNumber.transform, false);
+            var HotkeyNumberTextRt = HotkeyNumberText.GetComponent<RectTransform>();
+            HotkeyNumberTextRt.anchorMin = new Vector2(0f, 0f);
+            HotkeyNumberTextRt.anchorMax = new Vector2(1f, 1f);
+            HotkeyNumberTextRt.pivot = new Vector2(0.5f, 0.5f);
+            HotkeyNumberTextRt.anchoredPosition = new Vector2(-1.5f, 0.5f);
+            HotkeyNumberTextRt.sizeDelta = new Vector2(-3f, -1f);
+            // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/HotkeyNumber/HotkeyNumberText
+            // Component: UnityEngine.CanvasRenderer
+            // Component: TMPro.TextMeshProUGUI
+            // color = Color(1, 1, 1, 1)
+            // text = "2"
+            // font = TMP_FontAsset(Erika Ormig SDF Menu)
+            // fontSize = 18
+            // alignment = Bottom
+            // lineSpacing = 0
+            // material = Material(Default UI Material)
+            // raycastTarget = True
+
+        var Trade = new GameObject("Trade", typeof(RectTransform));
+        Trade.transform.SetParent(Padding.transform, false);
+        var TradeRt = Trade.GetComponent<RectTransform>();
+        TradeRt.anchorMin = new Vector2(0f, 0f);
+        TradeRt.anchorMax = new Vector2(1f, 1f);
+        TradeRt.pivot = new Vector2(0.5f, 0.5f);
+        TradeRt.anchoredPosition = new Vector2(0f, 0f);
+        TradeRt.sizeDelta = new Vector2(0f, 0f);
+        // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/Trade
+        // Component: UnityEngine.CanvasGroup
+        // interactable = False
+
+            var Edges = new GameObject("Edges", typeof(RectTransform));
+            Edges.transform.SetParent(Trade.transform, false);
+            var EdgesRt = Edges.GetComponent<RectTransform>();
+            EdgesRt.anchorMin = new Vector2(0f, 0f);
+            EdgesRt.anchorMax = new Vector2(1f, 1f);
+            EdgesRt.pivot = new Vector2(0.5f, 0.5f);
+            EdgesRt.anchoredPosition = new Vector2(0f, 0f);
+            EdgesRt.sizeDelta = new Vector2(4f, 4f);
+            // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/Trade/Edges
+            // Component: UnityEngine.CanvasRenderer
+            // Component: UnityEngine.UI.Image
+            // color = Color(1, 1, 1, 1)
+            // sprite = Sprite(trade_slot_edges_001)
+            // overrideSprite = Sprite(trade_slot_edges_001)
+            // material = Material(Default UI Material)
+            // raycastTarget = True
+            // type = Simple
+            // fillMethod = Radial360
+            // fillAmount = 1
+            // preserveAspect = False
+
+            var Price = new GameObject("Price", typeof(RectTransform));
+            Price.transform.SetParent(Trade.transform, false);
+            var PriceRt = Price.GetComponent<RectTransform>();
+            PriceRt.anchorMin = new Vector2(0.5f, 0f);
+            PriceRt.anchorMax = new Vector2(0.5f, 0f);
+            PriceRt.pivot = new Vector2(0.5f, 0f);
+            PriceRt.anchoredPosition = new Vector2(0f, -11.29f);
+            PriceRt.sizeDelta = new Vector2(65f, 13f);
+            // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/Trade/Price
+            // Component: UnityEngine.CanvasRenderer
+            // Component: UnityEngine.UI.Image
+            // color = Color(1, 1, 1, 1)
+            // sprite = Sprite(trade_slot_price_001)
+            // overrideSprite = Sprite(trade_slot_price_001)
+            // material = Material(Default UI Material)
+            // raycastTarget = True
+            // type = Simple
+            // fillMethod = Radial360
+            // fillAmount = 1
+            // preserveAspect = False
+
+                var PriceText = new GameObject("Price Text", typeof(RectTransform));
+                PriceText.transform.SetParent(Price.transform, false);
+                var PriceTextRt = PriceText.GetComponent<RectTransform>();
+                PriceTextRt.anchorMin = new Vector2(0f, 0f);
+                PriceTextRt.anchorMax = new Vector2(1f, 1f);
+                PriceTextRt.pivot = new Vector2(1f, 0f);
+                PriceTextRt.anchoredPosition = new Vector2(0f, 0f);
+                PriceTextRt.sizeDelta = new Vector2(0f, 0f);
+                // Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/Trade/Price/Price Text
+                // Component: UnityEngine.CanvasRenderer
+                // Component: TMPro.TextMeshProUGUI
+                // color = Color(1, 1, 1, 1)
+                // text = "100 OC"
+                // font = TMP_FontAsset(Erika Ormig SDF Menu)
+                // fontSize = 11.2
+                // alignment = Midline
+                // lineSpacing = 0
+                // material = Material(Default UI Material)
+                // raycastTarget = True
+

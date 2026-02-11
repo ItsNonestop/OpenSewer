@@ -1,0 +1,93 @@
+﻿OpenSewer Hover Dump | 2026-02-11 07:27:10
+Mouse: (486.0, 965.0, 0.0)
+Hover hits: 9
+[0] Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/ItemPosition/OS Energy Drink/Scale/Item Image :: UnityEngine.UI.Image
+  color = Color(1, 1, 1, 1)
+  sprite = Sprite(OS energy drink)
+  overrideSprite = Sprite(OS energy drink)
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Simple
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False
+[1] Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone) :: UnityEngine.UI.Image
+  color = Color(1, 1, 1, 0)
+  sprite = Sprite(slot_001)
+  overrideSprite = Sprite(slot_001)
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Simple
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False
+[2] Loading Screen/Normal Screen/Black :: UnityEngine.UI.Image
+  color = Color(0, 0, 0, 1)
+  sprite = null
+  overrideSprite = null
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Simple
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False
+[3] Game_Logic/Game UI/White Canvas/White Canvas Cover :: UnityEngine.UI.Image
+  color = Color(1, 1, 1, 1)
+  sprite = null
+  overrideSprite = null
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Simple
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False
+[4] Game_Logic/Game UI/Black Canvas/Black Canvas Cover/Red :: UnityEngine.UI.Image
+  color = Color(0.047, 0.012, 0.012, 1)
+  sprite = Sprite(Vignette_001)
+  overrideSprite = Sprite(Vignette_001)
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Sliced
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False
+[5] Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Remove Area :: UnityEngine.UI.Image
+  color = Color(0.588, 0.368, 0.368, 0)
+  sprite = null
+  overrideSprite = null
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Simple
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False
+[6] Game_Logic/Game UI/Game UI/Game Menu/Main :: UnityEngine.UI.Image
+  color = Color(0, 0, 0, 0.208)
+  sprite = null
+  overrideSprite = null
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Simple
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False
+[7] Game_Logic/Game UI/Black Canvas/Black Canvas Cover :: UnityEngine.UI.Image
+  color = Color(0, 0, 0, 1)
+  sprite = null
+  overrideSprite = null
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Simple
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False
+[8] Game_Logic/Other/Credits/CreditsCanvas/Background :: UnityEngine.UI.Image
+  color = Color(0, 0, 0, 1)
+  sprite = null
+  overrideSprite = null
+  material = Material(Default UI Material)
+  raycastTarget = True
+  type = Simple
+  fillMethod = Radial360
+  fillAmount = 1
+  preserveAspect = False

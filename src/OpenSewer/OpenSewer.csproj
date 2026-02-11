@@ -19,7 +19,6 @@
   <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.*" />
-    <PackageReference Include="System.Reactive" Version="6.1.0" />
     <PackageReference Include="UnityEngine.Modules" Version="2019.4" IncludeAssets="compile" />
   </ItemGroup>
   
@@ -38,6 +37,22 @@
     </Reference>
     <Reference Include="UnityEngine.IMGUIModule">
       <HintPath>$(GameManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI" Condition="Exists('$(GameManagedDir)\UnityEngine.UI.dll')">
+      <HintPath>$(GameManagedDir)\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule" Condition="Exists('$(GameManagedDir)\UnityEngine.UIModule.dll')">
+      <HintPath>$(GameManagedDir)\UnityEngine.UIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule" Condition="Exists('$(GameManagedDir)\UnityEngine.TextRenderingModule.dll')">
+      <HintPath>$(GameManagedDir)\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro" Condition="Exists('$(GameManagedDir)\Unity.TextMeshPro.dll')">
+      <HintPath>$(GameManagedDir)\Unity.TextMeshPro.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.InputLegacyModule" Condition="Exists('$(GameManagedDir)\UnityEngine.InputLegacyModule.dll')">

@@ -1,0 +1,28 @@
+﻿OpenSewer UI C# Reference Dump | 2026-02-11 07:27:11
+Scene: Open Sewer Tenement
+Root: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/ItemPosition/OS Energy Drink/Scale/Item Image
+MaxDepth: 6
+
+// Generated reference: adapt naming/layout/style to your real implementation.
+
+var ItemImage = new GameObject("Item Image", typeof(RectTransform));
+// root
+var ItemImageRt = ItemImage.GetComponent<RectTransform>();
+ItemImageRt.anchorMin = new Vector2(0f, 0f);
+ItemImageRt.anchorMax = new Vector2(1f, 1f);
+ItemImageRt.pivot = new Vector2(0.5f, 0.5f);
+ItemImageRt.anchoredPosition = new Vector2(0f, 0f);
+ItemImageRt.sizeDelta = new Vector2(0f, 0f);
+// Source path: Game_Logic/Game UI/Game UI/Game Menu/Main/Main Panel/Main Panel content/Main Panels Padding/Inventory Panel/Inventory Panel/Player slots/Content/Inventory slots/Inventory Slot Panel/Slot(Clone)/Padding/ItemPosition/OS Energy Drink/Scale/Item Image
+// Component: UnityEngine.CanvasRenderer
+// Component: UnityEngine.UI.Image
+// color = Color(1, 1, 1, 1)
+// sprite = Sprite(OS energy drink)
+// overrideSprite = Sprite(OS energy drink)
+// material = Material(Default UI Material)
+// raycastTarget = True
+// type = Simple
+// fillMethod = Radial360
+// fillAmount = 1
+// preserveAspect = False
+
