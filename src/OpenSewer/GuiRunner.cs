@@ -873,6 +873,7 @@ namespace OpenSewer
                 {
                     cell.Icon.enabled = false;
                     cell.Label.text = string.Empty;
+                    cell.Label.gameObject.SetActive(false);
                     cell.Background.color = Color.white;
                     continue;
                 }
@@ -890,7 +891,10 @@ namespace OpenSewer
                     cell.Icon.enabled = false;
                 }
 
-                cell.Label.text = string.Empty;
+                int ownedAmount = GetQuantityBadgeAmount(item);
+                bool showOwnedAmount = ownedAmount > 0;
+                cell.Label.text = showOwnedAmount ? ownedAmount.ToString() : string.Empty;
+                cell.Label.gameObject.SetActive(showOwnedAmount);
                 bool selected = ReferenceEquals(item, _selectedItem);
                 cell.Background.color = selected ? new Color(0.95f, 0.9f, 0.72f, 1f) : Color.white;
             }
@@ -1125,6 +1129,20 @@ namespace OpenSewer
             if (item == null)
                 return 0;
 
+            Inventory inventory = Inventory.instance;
+            if (inventory != null)
+            {
+                try
+                {
+                    int amountInInventory = inventory.GetItemAmountInInventory(item.ID, false);
+                    return Mathf.Max(0, amountInInventory);
+                }
+                catch (Exception ex)
+                {
+                    Plugin.DLog($"Inventory.GetItemAmountInInventory failed: {ex.GetType().Name}");
+                }
+            }
+
             BackpackStorage backpack = BackpackStorage.instance;
             if (backpack == null)
                 return 0;
@@ -1334,6 +1352,7 @@ namespace OpenSewer
                 SetStatus($"Spawned {requested}x {item.Title}");
                 if (ReferenceEquals(item, _selectedItem))
                     UpdateSelectedItemUi();
+                ApplyItemCells();
             }
             catch (Exception ex)
             {

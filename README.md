@@ -50,11 +50,11 @@ Item spawning through Items Tab in the menu is fully functional, there is some f
   * Sucessfully shows item information such as the Item Name, Item Category, and Item Description
   * Displays the items max stack size, making it easy for the user to know how much they will recieve upon adding a stack through add stack button
   * Displays the estimate value of the item
+  * Displays the current amount of selected item player has in their inventory, both in the section to select the item and in the item description
 
  
 ## Work in progress
 * Item Description Area
-  * Displaying the ammount of selected item player already has in their inventory for convinence, attemping to get the number to display similar to the game inventory by adding the amount on the image of item
   * Possibly work on making description area more consistant with games inventory to make the mod feel more integrated with the game, ideas would include
      *adding the currency symbol next to items estimated value, keeping what is displayed consistent like removing category: before the selected items category the same way as inventory, changing the background to match the inventorys description exactly, make sizes consisent with in game inventory
   * Features that are available on selected items inside your players inventory such as:
@@ -79,6 +79,7 @@ Item spawning through Items Tab in the menu is fully functional, there is some f
 <img width="1920" height="1200" alt="{701EDB1B-4DEA-46BF-A406-EB3CA5546893}" src="https://github.com/user-attachments/assets/3f997a4d-ef1c-4284-ad4f-eb489e896227" />
 `When an item is selected by pressing its image (you will know from a yellow backround on selected item and description is showing) you can spawn the item directly into your inventory by pressing either of the spawn buttons, note stack size is displayed in item description if you chose to add stack, and amount can be changed to a specific amount by typing it in amount text box and pressing spawn amount`
 <img width="1920" height="1200" alt="{1063CA99-781A-406C-B0C0-2AF79B4988A5}" src="https://github.com/user-attachments/assets/72048309-97cf-49a6-a69e-fada2cbdf972" />
+`Item Tab now displays the amount of the selected item that is in player inventory, showing in the area to select and item, and in the item description`
 
 ## Furniture Spawning Tab (Furniture)
 `Features not implimented/documented, this tab will allow you to find any furniture in game and add them to your inventory`
