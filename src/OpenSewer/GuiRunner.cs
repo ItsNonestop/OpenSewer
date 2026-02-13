@@ -74,6 +74,33 @@ namespace OpenSewer
             public FurnitureEntry Entry;
         }
 
+        private sealed class StatDef
+        {
+            public string Key;
+            public string Label;
+            public string Category;
+            public Func<float> Getter;
+            public Action<float> Setter;
+            public float Min;
+            public float Max;
+        }
+
+        private sealed class StatCellRef
+        {
+            public UIButton Button;
+            public UIImage Background;
+            public TMP_Text Label;
+            public TMP_Text Value;
+            public StatDef BoundStat;
+        }
+
+        private sealed class StatCategoryButtonRef
+        {
+            public string Category;
+            public UIImage Background;
+            public TMP_Text Label;
+        }
+
 #pragma warning disable CS0649 // Populated by Unity JsonUtility
         [Serializable]
         private sealed class ItemJsonRoot
@@ -125,6 +152,10 @@ namespace OpenSewer
         private readonly List<CategoryCellRef> _furnitureCategoryCells = new();
         private readonly List<FurnitureSkinCellRef> _furnitureSkinCells = new();
         private readonly List<FurnitureEntry> _selectedFurnitureSkinEntries = new();
+        private readonly List<StatDef> _statDefs = new();
+        private readonly List<StatDef> _filteredStatDefs = new();
+        private readonly List<StatCellRef> _statCells = new();
+        private readonly List<StatCategoryButtonRef> _statsCategoryButtons = new();
 
         private GameObject _root;
         private MenuTab _activeTab = MenuTab.Main;
@@ -157,16 +188,29 @@ namespace OpenSewer
         private RectTransform _furnitureCategoryListHoverRegion;
         private RectTransform _furnitureSkinListHoverRegion;
         private GameObject _furnitureCategoryBrowserPanel;
+        private TMP_InputField _statsSearchInput;
+        private TMP_InputField _statsCategoryInput;
+        private TMP_InputField _statsValueInput;
+        private TMP_Text _statsListInfoText;
+        private TMP_Text _statsSelectedNameText;
+        private TMP_Text _statsSelectedCategoryText;
+        private TMP_Text _statsSelectedRangeText;
+        private TMP_Text _statsSelectedCurrentText;
+        private TMP_Text _statsSelectedFreezeStateText;
+        private RectTransform _statsListHoverRegion;
         private RectTransform _categoryListHoverRegion;
         private GameObject _categoryBrowserPanel;
         private Item _selectedItem;
         private FurnitureEntry _selectedFurnitureEntry;
+        private StatDef _selectedStatDef;
         private int _itemScrollStartIndex;
         private int _furnitureScrollStartIndex;
+        private int _statsScrollStartIndex;
         private int _categoryScrollStartIndex;
         private int _furnitureCategoryScrollStartIndex;
         private int _furnitureSkinScrollStartIndex;
         private bool _furnitureCategoryBrowserVisible;
+        private string _activeStatsCategoryShortcut = string.Empty;
         private bool _categoryBrowserVisible;
         private bool _visible;
         private bool _itemDetailsSourceInitialized;
@@ -223,6 +267,7 @@ namespace OpenSewer
 
             HandleItemsScrollInput();
             HandleFurnitureScrollInput();
+            HandleStatsScrollInput();
             HandleFurnitureCategoryScrollInput();
             HandleFurnitureSkinScrollInput();
             HandleCategoryScrollInput();
@@ -320,7 +365,7 @@ namespace OpenSewer
             _pages[MenuTab.Main] = BuildMainPage(pagesRoot.transform);
             _pages[MenuTab.Items] = BuildItemsPage(pagesRoot.transform);
             _pages[MenuTab.Furniture] = BuildFurniturePage(pagesRoot.transform);
-            _pages[MenuTab.Stats] = BuildPlaceholderPage(pagesRoot.transform, "Player stats controls will be wired here.");
+            _pages[MenuTab.Stats] = BuildStatsPage(pagesRoot.transform);
             _pages[MenuTab.Time] = BuildTimePage(pagesRoot.transform);
             _pages[MenuTab.Debug] = BuildDebugPage(pagesRoot.transform);
 
@@ -778,6 +823,212 @@ namespace OpenSewer
 
             _ = btnA;
             return page.gameObject;
+        }
+
+        private GameObject BuildStatsPage(Transform parent)
+        {
+            var page = NewUI("StatsPage", parent);
+            Stretch(RT(page));
+            _statCells.Clear();
+            _statsCategoryButtons.Clear();
+            _filteredStatDefs.Clear();
+            _selectedStatDef = null;
+            _statsScrollStartIndex = 0;
+            InitializeStatDefinitions();
+
+            RectTransform leftPanel = NewPanelWithSprite(page.transform, "StatsListPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            leftPanel.anchorMin = new Vector2(0f, 0f);
+            leftPanel.anchorMax = new Vector2(0f, 1f);
+            leftPanel.pivot = new Vector2(0f, 0.5f);
+            leftPanel.anchoredPosition = Vector2.zero;
+            leftPanel.sizeDelta = new Vector2(458f, 0f);
+
+            RectTransform listBody = NewPanelWithSprite(leftPanel, "ListBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            Stretch(listBody);
+            listBody.offsetMin = new Vector2(18f, 18f);
+            listBody.offsetMax = new Vector2(-18f, -18f);
+
+            TMP_Text header = NewText(listBody, "STATS", 18, TextAlignmentOptions.TopLeft, Color.white);
+            header.rectTransform.offsetMin = new Vector2(12f, 0f);
+            header.rectTransform.offsetMax = new Vector2(0f, -8f);
+
+            _statsListInfoText = NewText(listBody, "Showing: 0", 12, TextAlignmentOptions.TopRight, new Color(0.84f, 0.84f, 0.84f, 1f));
+            _statsListInfoText.rectTransform.offsetMin = new Vector2(0f, 0f);
+            _statsListInfoText.rectTransform.offsetMax = new Vector2(-12f, -10f);
+
+            RectTransform listViewport = NewUI("StatsListViewport", listBody).GetComponent<RectTransform>();
+            listViewport.anchorMin = new Vector2(0f, 0f);
+            listViewport.anchorMax = new Vector2(1f, 1f);
+            listViewport.offsetMin = new Vector2(8f, 8f);
+            listViewport.offsetMax = new Vector2(-8f, -34f);
+            listViewport.gameObject.AddComponent<RectMask2D>();
+            _statsListHoverRegion = listViewport;
+
+            var listRoot = NewUI("StatsList", listViewport).transform;
+            var listLayout = listRoot.gameObject.AddComponent<VerticalLayoutGroup>();
+            listLayout.spacing = 4f;
+            listLayout.childControlWidth = true;
+            listLayout.childControlHeight = true;
+            listLayout.childForceExpandWidth = true;
+            listLayout.childForceExpandHeight = false;
+            listLayout.padding = new RectOffset(4, 4, 4, 4);
+            Stretch(RT(listRoot.gameObject));
+
+            for (int i = 0; i < 20; i++)
+            {
+                RectTransform rowRt = NewPanelWithSprite(listRoot, $"StatCell{i}", "main_UI_background_002", Color.white, Image.Type.Sliced);
+                rowRt.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
+                UIButton rowBtn = rowRt.gameObject.AddComponent<UIButton>();
+                rowBtn.transition = Selectable.Transition.None;
+
+                TMP_Text rowLbl = NewText(rowRt, string.Empty, 12, TextAlignmentOptions.MidlineLeft, Color.white);
+                rowLbl.rectTransform.offsetMin = new Vector2(10f, 0f);
+                rowLbl.rectTransform.offsetMax = new Vector2(-120f, 0f);
+
+                TMP_Text rowVal = NewText(rowRt, string.Empty, 12, TextAlignmentOptions.MidlineRight, new Color(0.92f, 0.82f, 0.6f, 1f));
+                rowVal.rectTransform.offsetMin = new Vector2(160f, 0f);
+                rowVal.rectTransform.offsetMax = new Vector2(-10f, 0f);
+
+                var cell = new StatCellRef
+                {
+                    Button = rowBtn,
+                    Background = rowRt.GetComponent<UIImage>(),
+                    Label = rowLbl,
+                    Value = rowVal,
+                    BoundStat = null
+                };
+
+                int idx = i;
+                rowBtn.onClick.AddListener(() => OnStatCellClicked(idx));
+                _statCells.Add(cell);
+            }
+
+            RectTransform rightPanel = NewPanelWithSprite(page.transform, "StatsRightPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            rightPanel.anchorMin = new Vector2(0f, 0f);
+            rightPanel.anchorMax = new Vector2(1f, 1f);
+            rightPanel.pivot = new Vector2(0.5f, 0.5f);
+            rightPanel.offsetMin = new Vector2(468f, 0f);
+            rightPanel.offsetMax = Vector2.zero;
+
+            RectTransform topInfo = NewPanelWithSprite(rightPanel, "TopInfo", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            topInfo.anchorMin = new Vector2(0f, 1f);
+            topInfo.anchorMax = new Vector2(1f, 1f);
+            topInfo.pivot = new Vector2(0.5f, 1f);
+            topInfo.anchoredPosition = Vector2.zero;
+            topInfo.sizeDelta = new Vector2(0f, 470f);
+
+            TMP_Text controlsHeader = NewText(topInfo, "PLAYER STATS", 18, TextAlignmentOptions.TopLeft, Color.white);
+            controlsHeader.rectTransform.offsetMin = new Vector2(28f, 0f);
+            controlsHeader.rectTransform.offsetMax = new Vector2(0f, -26f);
+
+            RectTransform topInfoBody = NewPanelWithSprite(topInfo, "TopInfoBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            topInfoBody.anchorMin = new Vector2(0f, 0f);
+            topInfoBody.anchorMax = new Vector2(1f, 1f);
+            topInfoBody.offsetMin = new Vector2(18f, 18f);
+            topInfoBody.offsetMax = new Vector2(-18f, -54f);
+
+            var controls = NewUI("Controls", topInfoBody);
+            Stretch(RT(controls));
+            var v = controls.AddComponent<VerticalLayoutGroup>();
+            v.spacing = 8f;
+            v.childControlWidth = true;
+            v.childControlHeight = true;
+            v.childForceExpandHeight = false;
+            v.padding = new RectOffset(14, 14, 10, 10);
+
+            _statsSearchInput = BuildInputRow(controls.transform, "Search by name/key");
+            _statsSearchInput.onValueChanged.AddListener(_ => RefreshStatsList());
+            _statsSearchInput.characterLimit = 48;
+
+            _statsCategoryInput = BuildInputRow(controls.transform, "Category filter (optional)");
+            _statsCategoryInput.onValueChanged.AddListener(_ => RefreshStatsList());
+            _statsCategoryInput.characterLimit = 40;
+
+            _statsSelectedNameText = NewText(controls.transform, "Selected: -", 13, TextAlignmentOptions.Left, Color.white);
+            PrepareRectForLayout(_statsSelectedNameText.rectTransform);
+            _statsSelectedNameText.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
+
+            _statsSelectedCategoryText = NewText(controls.transform, "Category: -", 12, TextAlignmentOptions.Left, new Color(0.84f, 0.84f, 0.84f, 1f));
+            PrepareRectForLayout(_statsSelectedCategoryText.rectTransform);
+            _statsSelectedCategoryText.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
+
+            _statsSelectedRangeText = NewText(controls.transform, "Range: -", 12, TextAlignmentOptions.Left, new Color(0.84f, 0.84f, 0.84f, 1f));
+            PrepareRectForLayout(_statsSelectedRangeText.rectTransform);
+            _statsSelectedRangeText.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
+
+            _statsSelectedCurrentText = NewText(controls.transform, "Current: -", 12, TextAlignmentOptions.Left, new Color(0.92f, 0.82f, 0.6f, 1f));
+            PrepareRectForLayout(_statsSelectedCurrentText.rectTransform);
+            _statsSelectedCurrentText.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
+
+            _statsSelectedFreezeStateText = NewText(controls.transform, "Freeze: OFF", 12, TextAlignmentOptions.Left, new Color(0.9f, 0.75f, 0.75f, 1f));
+            PrepareRectForLayout(_statsSelectedFreezeStateText.rectTransform);
+            _statsSelectedFreezeStateText.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
+
+            _statsValueInput = BuildInputRow(controls.transform, "Value");
+            _statsValueInput.contentType = TMP_InputField.ContentType.DecimalNumber;
+            _statsValueInput.characterLimit = 10;
+
+            var actionRowA = NewUI("ActionRowA", controls.transform);
+            var hA = actionRowA.AddComponent<HorizontalLayoutGroup>();
+            hA.spacing = 6f;
+            hA.childForceExpandWidth = true;
+            hA.childForceExpandHeight = false;
+            actionRowA.AddComponent<LayoutElement>().preferredHeight = 46f;
+            BuildInlineButton(actionRowA.transform, "Apply Value", ApplySelectedStatValue, 0f, 46f);
+            BuildInlineButton(actionRowA.transform, "Read Current", ReadSelectedStatIntoInput, 0f, 46f);
+
+            var actionRowB = NewUI("ActionRowB", controls.transform);
+            var hB = actionRowB.AddComponent<HorizontalLayoutGroup>();
+            hB.spacing = 6f;
+            hB.childForceExpandWidth = true;
+            hB.childForceExpandHeight = false;
+            actionRowB.AddComponent<LayoutElement>().preferredHeight = 46f;
+            BuildInlineButton(actionRowB.transform, "+10", () => AdjustSelectedStat(10f), 0f, 46f);
+            BuildInlineButton(actionRowB.transform, "-10", () => AdjustSelectedStat(-10f), 0f, 46f);
+
+            var actionRowC = NewUI("ActionRowC", controls.transform);
+            var hC = actionRowC.AddComponent<HorizontalLayoutGroup>();
+            hC.spacing = 6f;
+            hC.childForceExpandWidth = true;
+            hC.childForceExpandHeight = false;
+            actionRowC.AddComponent<LayoutElement>().preferredHeight = 46f;
+            BuildInlineButton(actionRowC.transform, "Toggle Freeze", ToggleSelectedStatFreeze, 0f, 46f);
+            BuildInlineButton(actionRowC.transform, "Unfreeze All", DisableAllStatFreezes, 0f, 46f);
+
+            RectTransform bottomInfo = NewPanelWithSprite(rightPanel, "BottomInfo", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            bottomInfo.anchorMin = new Vector2(0f, 0f);
+            bottomInfo.anchorMax = new Vector2(1f, 1f);
+            bottomInfo.offsetMin = new Vector2(18f, 18f);
+            bottomInfo.offsetMax = new Vector2(-18f, -482f);
+
+            TMP_Text categoriesHeader = NewText(bottomInfo, "CATEGORIES", 14, TextAlignmentOptions.TopLeft, Color.white);
+            categoriesHeader.rectTransform.offsetMin = new Vector2(12f, 0f);
+            categoriesHeader.rectTransform.offsetMax = new Vector2(0f, -12f);
+
+            RectTransform categoriesBody = NewPanelWithSprite(bottomInfo, "CategoriesBody", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            categoriesBody.anchorMin = new Vector2(0f, 0f);
+            categoriesBody.anchorMax = new Vector2(1f, 1f);
+            categoriesBody.offsetMin = new Vector2(12f, 12f);
+            categoriesBody.offsetMax = new Vector2(-12f, -36f);
+
+            var categoryButtonsRoot = NewUI("CategoryButtonsRoot", categoriesBody);
+            Stretch(RT(categoryButtonsRoot));
+            var categoryButtonsLayout = categoryButtonsRoot.AddComponent<VerticalLayoutGroup>();
+            categoryButtonsLayout.spacing = 6f;
+            categoryButtonsLayout.childControlWidth = true;
+            categoryButtonsLayout.childControlHeight = true;
+            categoryButtonsLayout.childForceExpandWidth = true;
+            categoryButtonsLayout.childForceExpandHeight = false;
+            categoryButtonsLayout.padding = new RectOffset(8, 8, 8, 8);
+
+            AddStatsCategoryButtonRow(categoryButtonsRoot.transform, "All", string.Empty, "Vitals", "Vitals");
+            AddStatsCategoryButtonRow(categoryButtonsRoot.transform, "Needs", "Needs", "Mental", "Mental");
+            AddStatsCategoryButtonRow(categoryButtonsRoot.transform, "Addiction Needs", "Addictions Need", "Addiction Level", "Addictions Level");
+            AddStatsCategoryButtonRow(categoryButtonsRoot.transform, "Advanced", "Advanced", null, null);
+
+            RefreshStatsList();
+            RefreshStatsCategoryShortcutStates();
+            return page;
         }
 
         private GameObject BuildFurniturePage(Transform parent)
@@ -1715,6 +1966,337 @@ namespace OpenSewer
             return categories.Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
+        private void InitializeStatDefinitions()
+        {
+            if (_statDefs.Count > 0)
+                return;
+
+            AddStatDef("vitals.health", "Health", "Vitals", PlayerStatsAccess.GetHealth, PlayerStatsAccess.SetHealth, 0f, 100f);
+            AddStatDef("needs.hunger", "Hunger", "Needs", PlayerStatsAccess.GetHunger, PlayerStatsAccess.SetHunger, 0f, 100f);
+            AddStatDef("needs.thirst", "Thirst", "Needs", PlayerStatsAccess.GetThirst, PlayerStatsAccess.SetThirst, 0f, 100f);
+            AddStatDef("needs.sleep", "Sleep Need", "Needs", PlayerStatsAccess.GetSleepNeed, PlayerStatsAccess.SetSleepNeed, 0f, 100f);
+            AddStatDef("needs.wc", "WC Need", "Needs", PlayerStatsAccess.GetWcNeed, PlayerStatsAccess.SetWcNeed, 0f, 100f);
+            AddStatDef("needs.hygiene", "Hygiene", "Needs", PlayerStatsAccess.GetHygiene, PlayerStatsAccess.SetHygiene, 0f, 100f);
+            AddStatDef("mental.depression", "Depression", "Mental", PlayerStatsAccess.GetDepression, PlayerStatsAccess.SetDepression, 0f, 100f);
+
+            AddStatDef("addictions.need.mushroom", "Mushroom Need", "Addictions Need", PlayerStatsAccess.GetMushroomNeed, PlayerStatsAccess.SetMushroomNeed, 0f, 100f);
+            AddStatDef("addictions.need.alcohol", "Alcohol Need", "Addictions Need", PlayerStatsAccess.GetAlcoholNeed, PlayerStatsAccess.SetAlcoholNeed, 0f, 100f);
+            AddStatDef("addictions.need.smoking", "Smoking Need", "Addictions Need", PlayerStatsAccess.GetSmokingNeed, PlayerStatsAccess.SetSmokingNeed, 0f, 100f);
+            AddStatDef("addictions.need.gambling", "Gambling Need", "Addictions Need", PlayerStatsAccess.GetGamblingNeed, PlayerStatsAccess.SetGamblingNeed, 0f, 100f);
+
+            AddStatDef("addictions.level.mushroom", "Mushroom Addiction", "Addictions Level", PlayerStatsAccess.GetMushroomAddiction, PlayerStatsAccess.SetMushroomAddiction, 0f, 100f);
+            AddStatDef("addictions.level.alcohol", "Alcohol Addiction", "Addictions Level", PlayerStatsAccess.GetAlcoholAddiction, PlayerStatsAccess.SetAlcoholAddiction, 0f, 100f);
+            AddStatDef("addictions.level.smoking", "Smoking Addiction", "Addictions Level", PlayerStatsAccess.GetSmokingAddiction, PlayerStatsAccess.SetSmokingAddiction, 0f, 100f);
+            AddStatDef("addictions.level.gambling", "Gambling Addiction", "Addictions Level", PlayerStatsAccess.GetGamblingAddiction, PlayerStatsAccess.SetGamblingAddiction, 0f, 100f);
+
+            AddStatDef("advanced.rate.need.mushroom", "Mushroom Need Base Rate", "Advanced", PlayerStatsAccess.GetMushroomNeedBaserate, PlayerStatsAccess.SetMushroomNeedBaserate, -1000f, 1000f);
+            AddStatDef("advanced.rate.need.alcohol", "Alcohol Need Base Rate", "Advanced", PlayerStatsAccess.GetAlcoholNeedBaserate, PlayerStatsAccess.SetAlcoholNeedBaserate, -1000f, 1000f);
+            AddStatDef("advanced.rate.need.smoking", "Smoking Need Base Rate", "Advanced", PlayerStatsAccess.GetSmokingNeedBaserate, PlayerStatsAccess.SetSmokingNeedBaserate, -1000f, 1000f);
+            AddStatDef("advanced.rate.need.gambling", "Gambling Need Base Rate", "Advanced", PlayerStatsAccess.GetGamblingNeedBaserate, PlayerStatsAccess.SetGamblingNeedBaserate, -1000f, 1000f);
+            AddStatDef("advanced.rate.change.mushroom", "Mushroom Addiction Change", "Advanced", PlayerStatsAccess.GetMushroomAddictionChange, PlayerStatsAccess.SetMushroomAddictionChange, -1000f, 1000f);
+            AddStatDef("advanced.rate.change.alcohol", "Alcohol Addiction Change", "Advanced", PlayerStatsAccess.GetAlcoholAddictionChange, PlayerStatsAccess.SetAlcoholAddictionChange, -1000f, 1000f);
+            AddStatDef("advanced.rate.change.smoking", "Smoking Addiction Change", "Advanced", PlayerStatsAccess.GetSmokingAddictionChange, PlayerStatsAccess.SetSmokingAddictionChange, -1000f, 1000f);
+            AddStatDef("advanced.rate.change.gambling", "Gambling Addiction Change", "Advanced", PlayerStatsAccess.GetGamblingAddictionChange, PlayerStatsAccess.SetGamblingAddictionChange, -1000f, 1000f);
+            AddStatDef("advanced.withdrawal.mental", "Withdrawal Mental Loss", "Advanced", PlayerStatsAccess.GetWithdrawalMentalHealthLoss, PlayerStatsAccess.SetWithdrawalMentalHealthLoss, -1000f, 1000f);
+        }
+
+        private void AddStatDef(string key, string label, string category, Func<float> getter, Action<float> setter, float min, float max)
+        {
+            _statDefs.Add(new StatDef
+            {
+                Key = key,
+                Label = label,
+                Category = category,
+                Getter = getter,
+                Setter = setter,
+                Min = min,
+                Max = max
+            });
+        }
+
+        private void AddStatsCategoryButtonRow(Transform parent, string leftLabel, string leftCategory, string rightLabel, string rightCategory)
+        {
+            var row = NewUI($"StatsCategoryRow_{leftLabel}", parent);
+            var rowLayout = row.AddComponent<HorizontalLayoutGroup>();
+            rowLayout.spacing = 6f;
+            rowLayout.childControlWidth = true;
+            rowLayout.childControlHeight = true;
+            rowLayout.childForceExpandWidth = true;
+            rowLayout.childForceExpandHeight = false;
+            row.AddComponent<LayoutElement>().preferredHeight = 34f;
+
+            CreateStatsCategoryButton(row.transform, leftLabel, leftCategory);
+            if (!string.IsNullOrWhiteSpace(rightLabel))
+                CreateStatsCategoryButton(row.transform, rightLabel, rightCategory);
+        }
+
+        private void CreateStatsCategoryButton(Transform parent, string label, string category)
+        {
+            RectTransform buttonRt = NewPanelWithSprite(parent, $"StatsCategoryBtn_{label}", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            buttonRt.gameObject.AddComponent<LayoutElement>().preferredHeight = 34f;
+            UIButton btn = buttonRt.gameObject.AddComponent<UIButton>();
+            btn.transition = Selectable.Transition.None;
+            btn.onClick.AddListener(() => SetStatsCategoryShortcut(category));
+
+            TMP_Text txt = NewText(buttonRt, label, 12, TextAlignmentOptions.Center, Color.white);
+            txt.rectTransform.offsetMin = new Vector2(4f, 0f);
+            txt.rectTransform.offsetMax = new Vector2(-4f, 0f);
+
+            _statsCategoryButtons.Add(new StatCategoryButtonRef
+            {
+                Category = category ?? string.Empty,
+                Background = buttonRt.GetComponent<UIImage>(),
+                Label = txt
+            });
+        }
+
+        private void RefreshStatsList()
+        {
+            InitializeStatDefinitions();
+            _filteredStatDefs.Clear();
+            _statsScrollStartIndex = 0;
+
+            string q = (_statsSearchInput?.text ?? string.Empty).Trim();
+            string categoryFilter = (_statsCategoryInput?.text ?? string.Empty).Trim();
+            IEnumerable<StatDef> stats = _statDefs;
+
+            if (!string.IsNullOrEmpty(categoryFilter))
+            {
+                stats = stats.Where(s => !string.IsNullOrWhiteSpace(s.Category) &&
+                    s.Category.IndexOf(categoryFilter, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            if (!string.IsNullOrEmpty(q))
+            {
+                stats = stats.Where(s =>
+                    (!string.IsNullOrWhiteSpace(s.Label) && s.Label.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                    (!string.IsNullOrWhiteSpace(s.Key) && s.Key.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0));
+            }
+
+            _filteredStatDefs.AddRange(stats);
+            if (_selectedStatDef != null && !_filteredStatDefs.Contains(_selectedStatDef))
+                _selectedStatDef = null;
+
+            _activeStatsCategoryShortcut = categoryFilter;
+
+            ApplyStatCells();
+            UpdateSelectedStatUi();
+            UpdateStatsListInfo();
+            RefreshStatsCategoryShortcutStates();
+        }
+
+        private void ApplyStatCells()
+        {
+            int maxStart = Mathf.Max(0, _filteredStatDefs.Count - _statCells.Count);
+            _statsScrollStartIndex = Mathf.Clamp(_statsScrollStartIndex, 0, maxStart);
+
+            for (int i = 0; i < _statCells.Count; i++)
+            {
+                int dataIndex = _statsScrollStartIndex + i;
+                StatDef stat = dataIndex < _filteredStatDefs.Count ? _filteredStatDefs[dataIndex] : null;
+                StatCellRef cell = _statCells[i];
+                cell.BoundStat = stat;
+
+                if (stat == null)
+                {
+                    cell.Label.text = string.Empty;
+                    cell.Value.text = string.Empty;
+                    cell.Button.interactable = false;
+                    if (cell.Background != null)
+                        cell.Background.color = Color.white;
+                    continue;
+                }
+
+                float value = SafeGetStatValue(stat);
+                bool frozen = StatFreezer.GetFrozenEnabled(stat.Key);
+                bool selected = ReferenceEquals(stat, _selectedStatDef);
+                cell.Label.text = frozen ? $"{stat.Label} [F]" : stat.Label;
+                cell.Value.text = value.ToString("0.##");
+                cell.Label.color = selected ? new Color(0.15f, 0.12f, 0.07f, 1f) : Color.white;
+                cell.Value.color = frozen
+                    ? new Color(0.72f, 0.95f, 0.72f, 1f)
+                    : selected ? new Color(0.2f, 0.14f, 0.05f, 1f) : new Color(0.92f, 0.82f, 0.6f, 1f);
+                if (cell.Background != null)
+                    cell.Background.color = selected ? new Color(0.95f, 0.9f, 0.72f, 1f) : Color.white;
+                cell.Button.interactable = true;
+            }
+
+            UpdateStatsListInfo();
+        }
+
+        private void OnStatCellClicked(int index)
+        {
+            if (index < 0 || index >= _statCells.Count)
+                return;
+
+            StatDef stat = _statCells[index].BoundStat;
+            if (stat == null)
+                return;
+
+            _selectedStatDef = stat;
+            ReadSelectedStatIntoInput();
+            UpdateSelectedStatUi();
+            ApplyStatCells();
+            SetStatus($"Selected stat: {stat.Label}");
+        }
+
+        private void UpdateSelectedStatUi()
+        {
+            if (_statsSelectedNameText == null)
+                return;
+
+            if (_selectedStatDef == null)
+            {
+                _statsSelectedNameText.text = "Selected: -";
+                _statsSelectedCategoryText.text = "Category: -";
+                _statsSelectedRangeText.text = "Range: -";
+                _statsSelectedCurrentText.text = "Current: -";
+                _statsSelectedCurrentText.color = new Color(0.92f, 0.82f, 0.6f, 1f);
+                _statsSelectedFreezeStateText.text = "Freeze: OFF";
+                return;
+            }
+
+            float current = SafeGetStatValue(_selectedStatDef);
+            bool frozen = StatFreezer.GetFrozenEnabled(_selectedStatDef.Key);
+            _statsSelectedNameText.text = $"Selected: {_selectedStatDef.Label}";
+            _statsSelectedCategoryText.text = $"Category: {_selectedStatDef.Category}";
+            _statsSelectedRangeText.text = $"Range: {_selectedStatDef.Min:0.##} .. {_selectedStatDef.Max:0.##}";
+            _statsSelectedCurrentText.text = $"Current: {current:0.##}";
+            _statsSelectedCurrentText.color = frozen
+                ? new Color(0.72f, 0.95f, 0.72f, 1f)
+                : new Color(0.92f, 0.82f, 0.6f, 1f);
+            _statsSelectedFreezeStateText.text = $"Freeze: {(frozen ? "ON" : "OFF")}";
+            _statsSelectedFreezeStateText.color = frozen
+                ? new Color(0.75f, 0.94f, 0.74f, 1f)
+                : new Color(0.9f, 0.75f, 0.75f, 1f);
+        }
+
+        private void ApplySelectedStatValue()
+        {
+            if (_selectedStatDef == null)
+            {
+                SetStatus("No stat selected.");
+                return;
+            }
+
+            if (!float.TryParse(_statsValueInput?.text, out float value))
+            {
+                SetStatus("Invalid stat value.");
+                return;
+            }
+
+            float clamped = Mathf.Clamp(value, _selectedStatDef.Min, _selectedStatDef.Max);
+            _selectedStatDef.Setter?.Invoke(clamped);
+            if (StatFreezer.GetFrozenEnabled(_selectedStatDef.Key))
+                StatFreezer.SetFrozenTarget(_selectedStatDef.Key, clamped);
+
+            if (_statsValueInput != null)
+                _statsValueInput.text = clamped.ToString("0.##");
+            ApplyStatCells();
+            UpdateSelectedStatUi();
+            SetStatus($"Set {_selectedStatDef.Label} to {clamped:0.##}");
+        }
+
+        private void ReadSelectedStatIntoInput()
+        {
+            if (_selectedStatDef == null)
+            {
+                SetStatus("No stat selected.");
+                return;
+            }
+
+            float current = SafeGetStatValue(_selectedStatDef);
+            if (_statsValueInput != null)
+                _statsValueInput.text = current.ToString("0.##");
+            UpdateSelectedStatUi();
+        }
+
+        private void AdjustSelectedStat(float delta)
+        {
+            if (_selectedStatDef == null)
+            {
+                SetStatus("No stat selected.");
+                return;
+            }
+
+            float current = SafeGetStatValue(_selectedStatDef);
+            float target = Mathf.Clamp(current + delta, _selectedStatDef.Min, _selectedStatDef.Max);
+            _selectedStatDef.Setter?.Invoke(target);
+            if (StatFreezer.GetFrozenEnabled(_selectedStatDef.Key))
+                StatFreezer.SetFrozenTarget(_selectedStatDef.Key, target);
+
+            if (_statsValueInput != null)
+                _statsValueInput.text = target.ToString("0.##");
+            ApplyStatCells();
+            UpdateSelectedStatUi();
+            SetStatus($"{_selectedStatDef.Label} {(delta >= 0f ? "increased" : "decreased")} to {target:0.##}");
+        }
+
+        private void ToggleSelectedStatFreeze()
+        {
+            if (_selectedStatDef == null)
+            {
+                SetStatus("No stat selected.");
+                return;
+            }
+
+            bool enabled = !StatFreezer.GetFrozenEnabled(_selectedStatDef.Key);
+            StatFreezer.SetFrozenEnabled(_selectedStatDef.Key, enabled);
+            if (enabled)
+                StatFreezer.SetFrozenTarget(_selectedStatDef.Key, SafeGetStatValue(_selectedStatDef));
+
+            ApplyStatCells();
+            UpdateSelectedStatUi();
+            SetStatus($"{_selectedStatDef.Label} freeze {(enabled ? "enabled" : "disabled")}.");
+        }
+
+        private void DisableAllStatFreezes()
+        {
+            StatFreezer.DisableAllFrozen();
+            ApplyStatCells();
+            UpdateSelectedStatUi();
+            SetStatus("All stat freezes disabled.");
+        }
+
+        private void SetStatsCategoryShortcut(string category)
+        {
+            string normalizedCategory = category ?? string.Empty;
+            _activeStatsCategoryShortcut = normalizedCategory;
+            if (_statsCategoryInput != null)
+                _statsCategoryInput.text = normalizedCategory;
+            RefreshStatsList();
+            SetStatus(string.IsNullOrEmpty(normalizedCategory)
+                ? "Stats category cleared."
+                : $"Stats category set: {normalizedCategory}");
+        }
+
+        private void RefreshStatsCategoryShortcutStates()
+        {
+            string active = (_statsCategoryInput?.text ?? _activeStatsCategoryShortcut ?? string.Empty).Trim();
+            for (int i = 0; i < _statsCategoryButtons.Count; i++)
+            {
+                StatCategoryButtonRef entry = _statsCategoryButtons[i];
+                bool selected = string.Equals(entry.Category ?? string.Empty, active, StringComparison.OrdinalIgnoreCase);
+
+                if (entry.Background != null)
+                    entry.Background.color = selected ? new Color(0.95f, 0.9f, 0.72f, 1f) : Color.white;
+                if (entry.Label != null)
+                    entry.Label.color = selected ? new Color(0.2f, 0.14f, 0.05f, 1f) : Color.white;
+            }
+        }
+
+        private static float SafeGetStatValue(StatDef stat)
+        {
+            try
+            {
+                return stat?.Getter?.Invoke() ?? 0f;
+            }
+            catch
+            {
+                return 0f;
+            }
+        }
+
         private void RefreshItemList()
         {
             _filteredItems.Clear();
@@ -2320,6 +2902,23 @@ namespace OpenSewer
             ApplyFurnitureCells();
         }
 
+        private void HandleStatsScrollInput()
+        {
+            if (_activeTab != MenuTab.Stats || _statsListHoverRegion == null || _filteredStatDefs.Count <= _statCells.Count)
+                return;
+
+            if (!RectTransformUtility.RectangleContainsScreenPoint(_statsListHoverRegion, Input.mousePosition, null))
+                return;
+
+            float wheel = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(wheel) < 0.01f)
+                return;
+
+            _statsScrollStartIndex += wheel > 0f ? -1 : 1;
+            _statsScrollStartIndex = Mathf.Clamp(_statsScrollStartIndex, 0, Mathf.Max(0, _filteredStatDefs.Count - _statCells.Count));
+            ApplyStatCells();
+        }
+
         private void HandleFurnitureCategoryScrollInput()
         {
             if (_activeTab != MenuTab.Furniture || !_furnitureCategoryBrowserVisible || _furnitureCategoryListHoverRegion == null || _filteredFurnitureCategoryOptions.Count <= _furnitureCategoryCells.Count)
@@ -2401,6 +3000,22 @@ namespace OpenSewer
             int start = _furnitureScrollStartIndex + 1;
             int end = Mathf.Min(_furnitureScrollStartIndex + _furnitureCells.Count, _filteredFurnitureEntries.Count);
             _furnitureListInfoText.text = $"Showing: {start}-{end} of {_filteredFurnitureEntries.Count}";
+        }
+
+        private void UpdateStatsListInfo()
+        {
+            if (_statsListInfoText == null)
+                return;
+
+            if (_filteredStatDefs.Count == 0)
+            {
+                _statsListInfoText.text = "Showing: 0";
+                return;
+            }
+
+            int start = _statsScrollStartIndex + 1;
+            int end = Mathf.Min(_statsScrollStartIndex + _statCells.Count, _filteredStatDefs.Count);
+            _statsListInfoText.text = $"Showing: {start}-{end} of {_filteredStatDefs.Count}";
         }
 
         private void EnsureItemCategoryOptions()
@@ -2593,6 +3208,8 @@ namespace OpenSewer
                 RefreshItemList();
             else if (_activeTab == MenuTab.Furniture)
                 RefreshFurnitureList();
+            else if (_activeTab == MenuTab.Stats)
+                RefreshStatsList();
 
             SetStatus($"Active tab: {_activeTab}");
         }
