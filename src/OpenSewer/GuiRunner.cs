@@ -49,6 +49,31 @@ namespace OpenSewer
             public string Category;
         }
 
+        private sealed class FurnitureEntry
+        {
+            public Furniture Furniture;
+            public Furniture.Skin Skin;
+            public string Title;
+            public Sprite Image;
+            public int OwnedCount;
+        }
+
+        private sealed class FurnitureCellRef
+        {
+            public UIButton Button;
+            public UIImage Background;
+            public UIImage Icon;
+            public TMP_Text Label;
+            public FurnitureEntry BoundEntry;
+        }
+
+        private sealed class FurnitureSkinCellRef
+        {
+            public UIButton Button;
+            public TMP_Text Label;
+            public FurnitureEntry Entry;
+        }
+
 #pragma warning disable CS0649 // Populated by Unity JsonUtility
         [Serializable]
         private sealed class ItemJsonRoot
@@ -92,6 +117,14 @@ namespace OpenSewer
         private readonly List<string> _itemCategoryOptions = new();
         private readonly List<string> _filteredCategoryOptions = new();
         private readonly List<CategoryCellRef> _categoryCells = new();
+        private readonly List<FurnitureCellRef> _furnitureCells = new();
+        private readonly List<FurnitureEntry> _furnitureEntries = new();
+        private readonly List<FurnitureEntry> _filteredFurnitureEntries = new();
+        private readonly List<string> _furnitureCategoryOptions = new();
+        private readonly List<string> _filteredFurnitureCategoryOptions = new();
+        private readonly List<CategoryCellRef> _furnitureCategoryCells = new();
+        private readonly List<FurnitureSkinCellRef> _furnitureSkinCells = new();
+        private readonly List<FurnitureEntry> _selectedFurnitureSkinEntries = new();
 
         private GameObject _root;
         private MenuTab _activeTab = MenuTab.Main;
@@ -111,11 +144,29 @@ namespace OpenSewer
         private TMP_Text _itemDetailsValueText;
         private GameObject _itemDetailsContentRoot;
         private RectTransform _itemGridHoverRegion;
+        private TMP_InputField _furnitureSearchInput;
+        private TMP_InputField _furnitureAmountInput;
+        private TMP_InputField _furnitureCategoryInput;
+        private TMP_Text _furnitureListInfoText;
+        private UIImage _furnitureDetailsIcon;
+        private TMP_Text _furnitureDetailsNameText;
+        private TMP_Text _furnitureDetailsVariantText;
+        private TMP_Text _furnitureDetailsOwnedText;
+        private GameObject _furnitureDetailsContentRoot;
+        private RectTransform _furnitureGridHoverRegion;
+        private RectTransform _furnitureCategoryListHoverRegion;
+        private RectTransform _furnitureSkinListHoverRegion;
+        private GameObject _furnitureCategoryBrowserPanel;
         private RectTransform _categoryListHoverRegion;
         private GameObject _categoryBrowserPanel;
         private Item _selectedItem;
+        private FurnitureEntry _selectedFurnitureEntry;
         private int _itemScrollStartIndex;
+        private int _furnitureScrollStartIndex;
         private int _categoryScrollStartIndex;
+        private int _furnitureCategoryScrollStartIndex;
+        private int _furnitureSkinScrollStartIndex;
+        private bool _furnitureCategoryBrowserVisible;
         private bool _categoryBrowserVisible;
         private bool _visible;
         private bool _itemDetailsSourceInitialized;
@@ -171,6 +222,9 @@ namespace OpenSewer
             }
 
             HandleItemsScrollInput();
+            HandleFurnitureScrollInput();
+            HandleFurnitureCategoryScrollInput();
+            HandleFurnitureSkinScrollInput();
             HandleCategoryScrollInput();
         }
 
@@ -265,7 +319,7 @@ namespace OpenSewer
 
             _pages[MenuTab.Main] = BuildMainPage(pagesRoot.transform);
             _pages[MenuTab.Items] = BuildItemsPage(pagesRoot.transform);
-            _pages[MenuTab.Furniture] = BuildPlaceholderPage(pagesRoot.transform, "Furniture tools will be wired here.");
+            _pages[MenuTab.Furniture] = BuildFurniturePage(pagesRoot.transform);
             _pages[MenuTab.Stats] = BuildPlaceholderPage(pagesRoot.transform, "Player stats controls will be wired here.");
             _pages[MenuTab.Time] = BuildTimePage(pagesRoot.transform);
             _pages[MenuTab.Debug] = BuildDebugPage(pagesRoot.transform);
@@ -726,6 +780,388 @@ namespace OpenSewer
             return page.gameObject;
         }
 
+        private GameObject BuildFurniturePage(Transform parent)
+        {
+            var page = NewUI("FurniturePage", parent);
+            Stretch(RT(page));
+            _furnitureCells.Clear();
+            _furnitureEntries.Clear();
+            _filteredFurnitureEntries.Clear();
+            _furnitureCategoryOptions.Clear();
+            _filteredFurnitureCategoryOptions.Clear();
+            _furnitureCategoryCells.Clear();
+            _furnitureSkinCells.Clear();
+            _selectedFurnitureSkinEntries.Clear();
+            _selectedFurnitureEntry = null;
+            _furnitureScrollStartIndex = 0;
+            _furnitureCategoryScrollStartIndex = 0;
+            _furnitureSkinScrollStartIndex = 0;
+            _furnitureCategoryBrowserVisible = false;
+
+            const int furnitureGridColumns = 5;
+            const int furnitureGridVisibleRows = 8;
+            const int furnitureGridVisibleCellCount = furnitureGridColumns * furnitureGridVisibleRows;
+
+            RectTransform leftPanel = NewPanelWithSprite(page.transform, "FurnitureInventoryPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            leftPanel.anchorMin = new Vector2(0f, 0f);
+            leftPanel.anchorMax = new Vector2(0f, 1f);
+            leftPanel.pivot = new Vector2(0f, 0.5f);
+            leftPanel.anchoredPosition = Vector2.zero;
+            leftPanel.sizeDelta = new Vector2(458f, 0f);
+
+            RectTransform furnitureSlots = NewPanelWithSprite(leftPanel, "FurnitureSlots", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            furnitureSlots.anchorMin = new Vector2(0f, 1f);
+            furnitureSlots.anchorMax = new Vector2(1f, 1f);
+            furnitureSlots.pivot = new Vector2(0.5f, 1f);
+            furnitureSlots.anchoredPosition = Vector2.zero;
+            furnitureSlots.sizeDelta = new Vector2(0f, 590f);
+
+            var brassEdges = Panel(furnitureSlots, "BrassEdges", new Color(0.42f, 0.3f, 0.12f, 0.32f));
+            brassEdges.anchorMin = new Vector2(0f, 1f);
+            brassEdges.anchorMax = new Vector2(1f, 1f);
+            brassEdges.pivot = new Vector2(0.5f, 1f);
+            brassEdges.anchoredPosition = Vector2.zero;
+            brassEdges.sizeDelta = new Vector2(0f, 590f);
+
+            var content = NewPanelWithSprite(furnitureSlots, "Content", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            Stretch(content);
+            content.offsetMin = new Vector2(5f, 5f);
+            content.offsetMax = new Vector2(-5f, -5f);
+
+            var inventorySlots = NewUI("FurnitureInventorySlots", content);
+            var invSlotsRt = RT(inventorySlots);
+            Stretch(invSlotsRt);
+            inventorySlots.AddComponent<RectMask2D>();
+            _furnitureGridHoverRegion = invSlotsRt;
+
+            var gridRoot = NewUI("Grid", inventorySlots.transform);
+            Stretch(RT(gridRoot));
+            var grid = gridRoot.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(55f, 55f);
+            grid.spacing = new Vector2(14f, 14f);
+            grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = furnitureGridColumns;
+            grid.childAlignment = TextAnchor.UpperLeft;
+            var pad = grid.padding;
+            pad.left = 17;
+            pad.top = 17;
+            pad.bottom = 17;
+            grid.padding = pad;
+
+            for (int i = 0; i < furnitureGridVisibleCellCount; i++)
+            {
+                GameObject slot = NewUI($"FurnitureSlot{i}", gridRoot.transform);
+                RT(slot).sizeDelta = new Vector2(55f, 55f);
+                var bg = slot.AddComponent<UIImage>();
+                SetSprite(bg, "slot_001", Image.Type.Sliced, Color.white);
+                bg.raycastTarget = true;
+                var btn = slot.AddComponent<UIButton>();
+                btn.transition = Selectable.Transition.None;
+
+                var icon = NewUI("Icon", slot.transform).AddComponent<UIImage>();
+                icon.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                icon.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                icon.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                icon.rectTransform.anchoredPosition = Vector2.zero;
+                icon.rectTransform.sizeDelta = new Vector2(42f, 42f);
+                icon.preserveAspect = true;
+                icon.raycastTarget = false;
+                icon.enabled = false;
+
+                var label = NewText(slot.transform, string.Empty, 10, TextAlignmentOptions.BottomRight, Color.white);
+                label.rectTransform.offsetMin = new Vector2(0f, 0f);
+                label.rectTransform.offsetMax = new Vector2(-3f, 0f);
+                label.gameObject.SetActive(false);
+
+                var cell = new FurnitureCellRef
+                {
+                    Button = btn,
+                    Background = bg,
+                    Icon = icon,
+                    Label = label,
+                    BoundEntry = null
+                };
+
+                int idx = i;
+                btn.onClick.AddListener(() => OnFurnitureCellClicked(idx));
+                _furnitureCells.Add(cell);
+            }
+
+            RectTransform infoPanel = NewPanelWithSprite(leftPanel, "FurnitureInfoPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            infoPanel.anchorMin = new Vector2(0f, 0f);
+            infoPanel.anchorMax = new Vector2(1f, 0f);
+            infoPanel.pivot = new Vector2(0.5f, 0f);
+            infoPanel.anchoredPosition = Vector2.zero;
+            infoPanel.sizeDelta = new Vector2(0f, 260f);
+
+            RectTransform infoEmpty = NewPanelWithSprite(infoPanel, "InfoPanelEmpty", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            Stretch(infoEmpty);
+            infoEmpty.offsetMin = new Vector2(20f, 20f);
+            infoEmpty.offsetMax = new Vector2(-20f, -20f);
+
+            RectTransform detailsRoot = NewUI("SelectedFurnitureDetails", infoEmpty).GetComponent<RectTransform>();
+            Stretch(detailsRoot);
+            detailsRoot.offsetMin = new Vector2(12f, 10f);
+            detailsRoot.offsetMax = new Vector2(-12f, -10f);
+            _furnitureDetailsContentRoot = detailsRoot.gameObject;
+
+            RectTransform iconSlot = NewPanelWithSprite(detailsRoot, "SelectedIconSlot", "slot_001", Color.white, Image.Type.Sliced);
+            iconSlot.anchorMin = new Vector2(0f, 1f);
+            iconSlot.anchorMax = new Vector2(0f, 1f);
+            iconSlot.pivot = new Vector2(0f, 1f);
+            iconSlot.anchoredPosition = new Vector2(0f, 0f);
+            iconSlot.sizeDelta = new Vector2(76f, 76f);
+
+            _furnitureDetailsIcon = NewUI("SelectedIcon", iconSlot).AddComponent<UIImage>();
+            _furnitureDetailsIcon.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            _furnitureDetailsIcon.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            _furnitureDetailsIcon.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            _furnitureDetailsIcon.rectTransform.anchoredPosition = Vector2.zero;
+            _furnitureDetailsIcon.rectTransform.sizeDelta = new Vector2(56f, 56f);
+            _furnitureDetailsIcon.preserveAspect = true;
+            _furnitureDetailsIcon.enabled = false;
+            _furnitureDetailsIcon.raycastTarget = false;
+
+            RectTransform textRoot = NewUI("SelectedTextRoot", detailsRoot).GetComponent<RectTransform>();
+            textRoot.anchorMin = new Vector2(0f, 0f);
+            textRoot.anchorMax = new Vector2(1f, 1f);
+            textRoot.pivot = new Vector2(0f, 1f);
+            textRoot.offsetMin = new Vector2(90f, 0f);
+            textRoot.offsetMax = Vector2.zero;
+
+            _furnitureDetailsNameText = NewText(textRoot, "Select furniture", 16, TextAlignmentOptions.TopLeft, Color.white);
+            _furnitureDetailsNameText.rectTransform.anchorMin = new Vector2(0f, 1f);
+            _furnitureDetailsNameText.rectTransform.anchorMax = new Vector2(1f, 1f);
+            _furnitureDetailsNameText.rectTransform.pivot = new Vector2(0f, 1f);
+            _furnitureDetailsNameText.rectTransform.anchoredPosition = Vector2.zero;
+            _furnitureDetailsNameText.rectTransform.sizeDelta = new Vector2(0f, 24f);
+            _furnitureDetailsNameText.enableWordWrapping = false;
+
+            _furnitureDetailsVariantText = NewText(textRoot, "Variant: -", 12, TextAlignmentOptions.TopLeft, new Color(0.84f, 0.84f, 0.84f, 1f));
+            _furnitureDetailsVariantText.rectTransform.anchorMin = new Vector2(0f, 1f);
+            _furnitureDetailsVariantText.rectTransform.anchorMax = new Vector2(1f, 1f);
+            _furnitureDetailsVariantText.rectTransform.pivot = new Vector2(0f, 1f);
+            _furnitureDetailsVariantText.rectTransform.anchoredPosition = new Vector2(0f, -24f);
+            _furnitureDetailsVariantText.rectTransform.sizeDelta = new Vector2(0f, 20f);
+            _furnitureDetailsVariantText.enableWordWrapping = false;
+
+            _furnitureDetailsOwnedText = NewText(textRoot, "Owned: 0", 12, TextAlignmentOptions.TopLeft, new Color(0.92f, 0.82f, 0.6f, 1f));
+            _furnitureDetailsOwnedText.rectTransform.anchorMin = new Vector2(0f, 1f);
+            _furnitureDetailsOwnedText.rectTransform.anchorMax = new Vector2(1f, 1f);
+            _furnitureDetailsOwnedText.rectTransform.pivot = new Vector2(0f, 1f);
+            _furnitureDetailsOwnedText.rectTransform.anchoredPosition = new Vector2(0f, -44f);
+            _furnitureDetailsOwnedText.rectTransform.sizeDelta = new Vector2(0f, 20f);
+            _furnitureDetailsOwnedText.enableWordWrapping = false;
+
+            RectTransform rightPanel = NewPanelWithSprite(page.transform, "RightPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            rightPanel.anchorMin = new Vector2(0f, 0f);
+            rightPanel.anchorMax = new Vector2(1f, 1f);
+            rightPanel.pivot = new Vector2(0.5f, 0.5f);
+            rightPanel.offsetMin = new Vector2(468f, 0f);
+            rightPanel.offsetMax = Vector2.zero;
+
+            RectTransform topInfo = NewPanelWithSprite(rightPanel, "TopInfo", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            topInfo.anchorMin = new Vector2(0f, 1f);
+            topInfo.anchorMax = new Vector2(1f, 1f);
+            topInfo.pivot = new Vector2(0.5f, 1f);
+            topInfo.anchoredPosition = Vector2.zero;
+            topInfo.sizeDelta = new Vector2(0f, 420f);
+
+            TMP_Text hdr = NewText(topInfo, "FURNITURE", 18, TextAlignmentOptions.TopLeft, Color.white);
+            hdr.rectTransform.offsetMin = new Vector2(28f, 0f);
+            hdr.rectTransform.offsetMax = new Vector2(0f, -26f);
+
+            RectTransform topInfoBody = NewPanelWithSprite(topInfo, "TopInfoBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            topInfoBody.anchorMin = new Vector2(0f, 0f);
+            topInfoBody.anchorMax = new Vector2(1f, 1f);
+            topInfoBody.offsetMin = new Vector2(18f, 18f);
+            topInfoBody.offsetMax = new Vector2(-18f, -54f);
+
+            var controls = NewUI("Controls", topInfoBody);
+            Stretch(RT(controls));
+            var v = controls.AddComponent<VerticalLayoutGroup>();
+            v.spacing = 8f;
+            v.childControlWidth = true;
+            v.childControlHeight = true;
+            v.childForceExpandHeight = false;
+            v.padding = new RectOffset(14, 14, 10, 10);
+
+            _furnitureSearchInput = BuildInputRow(controls.transform, "Search by ID or title");
+            _furnitureSearchInput.onValueChanged.AddListener(_ => RefreshFurnitureList());
+            _furnitureSearchInput.characterLimit = 64;
+
+            var categoryRow = NewUI("CategoryRow", controls.transform);
+            var categoryLayout = categoryRow.AddComponent<HorizontalLayoutGroup>();
+            categoryLayout.spacing = 6f;
+            categoryLayout.childControlWidth = true;
+            categoryLayout.childControlHeight = true;
+            categoryLayout.childForceExpandWidth = false;
+            categoryLayout.childForceExpandHeight = false;
+            categoryRow.AddComponent<LayoutElement>().preferredHeight = 34f;
+
+            _furnitureCategoryInput = BuildInputRow(categoryRow.transform, "Category filter (optional)");
+            _furnitureCategoryInput.onValueChanged.AddListener(_ =>
+            {
+                _furnitureCategoryScrollStartIndex = 0;
+                RefreshFurnitureList();
+            });
+            _furnitureCategoryInput.characterLimit = 32;
+            var furnitureCategoryLe = _furnitureCategoryInput.gameObject.GetComponent<LayoutElement>();
+            furnitureCategoryLe.flexibleWidth = 1f;
+            furnitureCategoryLe.preferredWidth = 0f;
+
+            BuildInlineButton(categoryRow.transform, "Browse", ToggleFurnitureCategoryBrowser, 92f, 34f);
+            BuildInlineButton(categoryRow.transform, "Clear", ClearFurnitureCategoryFilter, 84f, 34f);
+
+            _furnitureListInfoText = NewText(controls.transform, "Showing: 0", 12, TextAlignmentOptions.Left, new Color(0.8f, 0.8f, 0.8f, 1f));
+            PrepareRectForLayout(_furnitureListInfoText.rectTransform);
+            _furnitureListInfoText.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
+
+            _furnitureAmountInput = BuildInputRow(controls.transform, "Amount");
+            _furnitureAmountInput.text = "1";
+            _furnitureAmountInput.contentType = TMP_InputField.ContentType.IntegerNumber;
+            _furnitureAmountInput.characterLimit = 4;
+
+            var actionRowA = NewUI("ActionRowA", controls.transform);
+            var hA = actionRowA.AddComponent<HorizontalLayoutGroup>();
+            hA.spacing = 6f;
+            hA.childForceExpandWidth = true;
+            hA.childForceExpandHeight = false;
+            actionRowA.AddComponent<LayoutElement>().preferredHeight = 56f;
+            BuildInlineButton(actionRowA.transform, "Spawn One", SpawnSelectedFurnitureOne, 0f, 56f);
+            BuildInlineButton(actionRowA.transform, "Spawn Amount", SpawnSelectedFurnitureAmount, 0f, 56f);
+
+            var actionRowB = NewUI("ActionRowB", controls.transform);
+            var hB = actionRowB.AddComponent<HorizontalLayoutGroup>();
+            hB.spacing = 6f;
+            hB.childForceExpandWidth = true;
+            hB.childForceExpandHeight = false;
+            actionRowB.AddComponent<LayoutElement>().preferredHeight = 56f;
+            BuildInlineButton(actionRowB.transform, "Refresh", RefreshFurnitureList, 0f, 56f);
+            BuildInlineButton(actionRowB.transform, "Clear Filters", ClearFurnitureFilters, 0f, 56f);
+
+            RectTransform bottomInfo = NewPanelWithSprite(rightPanel, "BottomInfo", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            bottomInfo.anchorMin = new Vector2(0f, 0f);
+            bottomInfo.anchorMax = new Vector2(1f, 1f);
+            bottomInfo.offsetMin = new Vector2(18f, 18f);
+            bottomInfo.offsetMax = new Vector2(-18f, -432f);
+
+            RectTransform skinsPanel = NewPanelWithSprite(bottomInfo, "SkinsPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            Stretch(skinsPanel);
+            skinsPanel.offsetMin = new Vector2(12f, 12f);
+            skinsPanel.offsetMax = new Vector2(-12f, -12f);
+
+            TMP_Text skinsHeader = NewText(skinsPanel, "SKINS", 14, TextAlignmentOptions.TopLeft, Color.white);
+            skinsHeader.rectTransform.offsetMin = new Vector2(12f, 0f);
+            skinsHeader.rectTransform.offsetMax = new Vector2(0f, -12f);
+
+            RectTransform skinsBody = NewPanelWithSprite(skinsPanel, "SkinsBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            skinsBody.anchorMin = new Vector2(0f, 0f);
+            skinsBody.anchorMax = new Vector2(1f, 1f);
+            skinsBody.offsetMin = new Vector2(10f, 10f);
+            skinsBody.offsetMax = new Vector2(-10f, -36f);
+
+            var skinsViewport = NewUI("SkinsViewport", skinsBody);
+            _furnitureSkinListHoverRegion = RT(skinsViewport);
+            Stretch(_furnitureSkinListHoverRegion);
+            skinsViewport.AddComponent<RectMask2D>();
+
+            var skinsList = NewUI("SkinsList", skinsViewport.transform);
+            Stretch(RT(skinsList));
+            var skinsLayout = skinsList.AddComponent<VerticalLayoutGroup>();
+            skinsLayout.spacing = 4f;
+            skinsLayout.childControlWidth = true;
+            skinsLayout.childControlHeight = true;
+            skinsLayout.childForceExpandWidth = true;
+            skinsLayout.childForceExpandHeight = false;
+            skinsLayout.padding = new RectOffset(4, 4, 4, 4);
+
+            for (int i = 0; i < 8; i++)
+            {
+                RectTransform rowRt = NewPanelWithSprite(skinsList.transform, $"SkinCell{i}", "main_UI_background_002", Color.white, Image.Type.Sliced);
+                rowRt.gameObject.AddComponent<LayoutElement>().preferredHeight = 30f;
+                UIButton rowBtn = rowRt.gameObject.AddComponent<UIButton>();
+                rowBtn.transition = Selectable.Transition.None;
+
+                TMP_Text rowTxt = NewText(rowRt, string.Empty, 12, TextAlignmentOptions.MidlineLeft, Color.white);
+                rowTxt.rectTransform.offsetMin = new Vector2(10f, 0f);
+                rowTxt.rectTransform.offsetMax = new Vector2(-10f, 0f);
+
+                var cell = new FurnitureSkinCellRef
+                {
+                    Button = rowBtn,
+                    Label = rowTxt,
+                    Entry = null
+                };
+
+                int idx = i;
+                rowBtn.onClick.AddListener(() => OnFurnitureSkinCellClicked(idx));
+                _furnitureSkinCells.Add(cell);
+            }
+
+            RectTransform categoryBrowser = NewPanelWithSprite(bottomInfo, "FurnitureCategoryBrowser", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            Stretch(categoryBrowser);
+            categoryBrowser.offsetMin = new Vector2(12f, 12f);
+            categoryBrowser.offsetMax = new Vector2(-12f, -12f);
+            _furnitureCategoryBrowserPanel = categoryBrowser.gameObject;
+            _furnitureCategoryBrowserPanel.SetActive(false);
+
+            TMP_Text categoryHeader = NewText(categoryBrowser, "CATEGORIES", 14, TextAlignmentOptions.TopLeft, Color.white);
+            categoryHeader.rectTransform.offsetMin = new Vector2(12f, 0f);
+            categoryHeader.rectTransform.offsetMax = new Vector2(0f, -12f);
+
+            RectTransform categoryBody = NewPanelWithSprite(categoryBrowser, "CategoryBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            categoryBody.anchorMin = new Vector2(0f, 0f);
+            categoryBody.anchorMax = new Vector2(1f, 1f);
+            categoryBody.offsetMin = new Vector2(10f, 10f);
+            categoryBody.offsetMax = new Vector2(-10f, -36f);
+
+            var categoryViewport = NewUI("CategoryViewport", categoryBody);
+            _furnitureCategoryListHoverRegion = RT(categoryViewport);
+            Stretch(_furnitureCategoryListHoverRegion);
+            categoryViewport.AddComponent<RectMask2D>();
+
+            var categoryList = NewUI("CategoryList", categoryViewport.transform);
+            Stretch(RT(categoryList));
+            var categoryListLayout = categoryList.AddComponent<VerticalLayoutGroup>();
+            categoryListLayout.spacing = 4f;
+            categoryListLayout.childControlWidth = true;
+            categoryListLayout.childControlHeight = true;
+            categoryListLayout.childForceExpandWidth = true;
+            categoryListLayout.childForceExpandHeight = false;
+            categoryListLayout.padding = new RectOffset(4, 4, 4, 4);
+
+            for (int i = 0; i < 9; i++)
+            {
+                RectTransform rowRt = NewPanelWithSprite(categoryList.transform, $"FurnitureCategoryCell{i}", "main_UI_background_002", Color.white, Image.Type.Sliced);
+                rowRt.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
+                UIButton rowBtn = rowRt.gameObject.AddComponent<UIButton>();
+                rowBtn.transition = Selectable.Transition.None;
+
+                TMP_Text rowTxt = NewText(rowRt, string.Empty, 13, TextAlignmentOptions.MidlineLeft, Color.white);
+                rowTxt.rectTransform.offsetMin = new Vector2(10f, 0f);
+                rowTxt.rectTransform.offsetMax = new Vector2(-10f, 0f);
+
+                var cell = new CategoryCellRef
+                {
+                    Button = rowBtn,
+                    Label = rowTxt,
+                    Category = null
+                };
+
+                int idx = i;
+                rowBtn.onClick.AddListener(() => OnFurnitureCategoryCellClicked(idx));
+                _furnitureCategoryCells.Add(cell);
+            }
+
+            RefreshFurnitureList();
+            RefreshFurnitureCategoryBrowserList();
+            RefreshFurnitureSkinsList();
+            return page;
+        }
+
         private GameObject BuildDebugPage(Transform parent)
         {
             RectTransform page = NewPanelWithSprite(parent, "DebugPage", "main_UI_background_002", Color.white, Image.Type.Sliced);
@@ -810,6 +1246,473 @@ namespace OpenSewer
             txt.rectTransform.offsetMin = new Vector2(4f, 0f);
             txt.rectTransform.offsetMax = new Vector2(-4f, 0f);
             return button;
+        }
+
+        private void RefreshFurnitureList()
+        {
+            string selectedFurnitureId = GetFurnitureIdText(_selectedFurnitureEntry);
+            string selectedSkinId = GetFurnitureSkinId(_selectedFurnitureEntry);
+            _filteredFurnitureEntries.Clear();
+            _furnitureScrollStartIndex = 0;
+
+            if (!FurnitureOperations.TryGetFurnitureList(out IList<Furniture> furnitures))
+            {
+                _furnitureEntries.Clear();
+                _furnitureCategoryOptions.Clear();
+                ApplyFurnitureCells();
+                UpdateSelectedFurnitureUi();
+                RefreshFurnitureSkinsList();
+                SetStatus("Furniture database not ready.");
+                return;
+            }
+
+            _furnitureEntries.Clear();
+            foreach (var cell in FurnitureOperations.ExpandToCells(furnitures))
+            {
+                _furnitureEntries.Add(new FurnitureEntry
+                {
+                    Furniture = cell.furniture,
+                    Skin = cell.skin,
+                    Title = string.IsNullOrWhiteSpace(cell.title) ? "<unknown>" : cell.title,
+                    Image = cell.image,
+                    OwnedCount = Mathf.Max(0, cell.ownedCount)
+                });
+            }
+
+            string q = (_furnitureSearchInput?.text ?? string.Empty).Trim();
+            bool hasId = int.TryParse(q, out int idQuery);
+            string categoryFilter = (_furnitureCategoryInput?.text ?? string.Empty).Trim();
+            IEnumerable<FurnitureEntry> entries = _furnitureEntries;
+
+            if (!string.IsNullOrEmpty(categoryFilter))
+            {
+                entries = entries.Where(entry => GetFurnitureCategories(entry).Any(c =>
+                    !string.IsNullOrWhiteSpace(c) &&
+                    c.IndexOf(categoryFilter, StringComparison.OrdinalIgnoreCase) >= 0));
+            }
+
+            if (!string.IsNullOrEmpty(q))
+            {
+                entries = entries.Where(entry =>
+                    (hasId && TryGetFurnitureNumericId(entry, out int entryId) && entryId == idQuery) ||
+                    GetFurnitureIdText(entry).IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (!string.IsNullOrWhiteSpace(entry.Title) && entry.Title.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0));
+            }
+
+            _filteredFurnitureEntries.AddRange(entries.Take(700));
+
+            _selectedFurnitureEntry = _filteredFurnitureEntries.FirstOrDefault(entry =>
+                string.Equals(GetFurnitureIdText(entry), selectedFurnitureId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(GetFurnitureSkinId(entry), selectedSkinId, StringComparison.OrdinalIgnoreCase));
+
+            EnsureFurnitureCategoryOptions();
+            ApplyFurnitureCells();
+            UpdateSelectedFurnitureUi();
+            RefreshFurnitureCategoryBrowserList();
+            RefreshFurnitureSkinsList();
+        }
+
+        private void ApplyFurnitureCells()
+        {
+            int maxStart = Mathf.Max(0, _filteredFurnitureEntries.Count - _furnitureCells.Count);
+            _furnitureScrollStartIndex = Mathf.Clamp(_furnitureScrollStartIndex, 0, maxStart);
+
+            for (int i = 0; i < _furnitureCells.Count; i++)
+            {
+                int dataIndex = _furnitureScrollStartIndex + i;
+                FurnitureEntry entry = dataIndex < _filteredFurnitureEntries.Count ? _filteredFurnitureEntries[dataIndex] : null;
+                FurnitureCellRef cell = _furnitureCells[i];
+                cell.BoundEntry = entry;
+
+                if (entry == null)
+                {
+                    cell.Icon.enabled = false;
+                    cell.Label.text = string.Empty;
+                    cell.Label.gameObject.SetActive(false);
+                    cell.Background.color = Color.white;
+                    continue;
+                }
+
+                if (entry.Image != null)
+                {
+                    cell.Icon.sprite = entry.Image;
+                    cell.Icon.overrideSprite = entry.Image;
+                    cell.Icon.type = Image.Type.Simple;
+                    cell.Icon.enabled = true;
+                }
+                else
+                {
+                    cell.Icon.enabled = false;
+                }
+
+                bool showOwned = entry.OwnedCount > 0;
+                cell.Label.text = showOwned ? entry.OwnedCount.ToString() : string.Empty;
+                cell.Label.gameObject.SetActive(showOwned);
+                bool selected = ReferenceEquals(entry, _selectedFurnitureEntry);
+                cell.Background.color = selected ? new Color(0.94f, 0.87f, 0.7f, 1f) : Color.white;
+            }
+
+            UpdateFurnitureListInfo();
+        }
+
+        private void OnFurnitureCellClicked(int index)
+        {
+            if (index < 0 || index >= _furnitureCells.Count)
+                return;
+
+            FurnitureEntry entry = _furnitureCells[index].BoundEntry;
+            if (entry == null)
+                return;
+
+            _selectedFurnitureEntry = entry;
+            UpdateSelectedFurnitureUi();
+            ApplyFurnitureCells();
+            RefreshFurnitureSkinsList();
+            SetStatus($"Selected furniture: {entry.Title}");
+        }
+
+        private void UpdateSelectedFurnitureUi()
+        {
+            if (_furnitureDetailsNameText == null)
+                return;
+
+            if (_selectedFurnitureEntry == null)
+            {
+                if (_furnitureDetailsContentRoot != null)
+                    _furnitureDetailsContentRoot.SetActive(false);
+                if (_furnitureDetailsIcon != null)
+                    _furnitureDetailsIcon.enabled = false;
+                if (_furnitureDetailsNameText != null)
+                    _furnitureDetailsNameText.text = "Select furniture";
+                if (_furnitureDetailsVariantText != null)
+                    _furnitureDetailsVariantText.text = "Variant: -";
+                if (_furnitureDetailsOwnedText != null)
+                    _furnitureDetailsOwnedText.text = "Owned: 0";
+                return;
+            }
+
+            if (_furnitureDetailsContentRoot != null)
+                _furnitureDetailsContentRoot.SetActive(true);
+
+            if (_furnitureDetailsIcon != null)
+            {
+                if (_selectedFurnitureEntry.Image != null)
+                {
+                    _furnitureDetailsIcon.sprite = _selectedFurnitureEntry.Image;
+                    _furnitureDetailsIcon.overrideSprite = _selectedFurnitureEntry.Image;
+                    _furnitureDetailsIcon.type = Image.Type.Simple;
+                    _furnitureDetailsIcon.enabled = true;
+                }
+                else
+                {
+                    _furnitureDetailsIcon.enabled = false;
+                }
+            }
+
+            if (_furnitureDetailsNameText != null)
+                _furnitureDetailsNameText.text = _selectedFurnitureEntry.Title;
+            if (_furnitureDetailsVariantText != null)
+                _furnitureDetailsVariantText.text = $"Variant: {GetFurnitureSkinId(_selectedFurnitureEntry)}";
+            if (_furnitureDetailsOwnedText != null)
+                _furnitureDetailsOwnedText.text = $"Owned: {_selectedFurnitureEntry.OwnedCount}";
+        }
+
+        private void SpawnSelectedFurnitureOne()
+        {
+            if (_selectedFurnitureEntry == null)
+            {
+                SetStatus("No furniture selected.");
+                return;
+            }
+
+            SpawnSelectedFurnitureAmountInternal(1);
+        }
+
+        private void SpawnSelectedFurnitureAmount()
+        {
+            if (_selectedFurnitureEntry == null)
+            {
+                SetStatus("No furniture selected.");
+                return;
+            }
+
+            if (!TryParsePositiveInt(_furnitureAmountInput?.text, out int amount))
+            {
+                amount = 1;
+                if (_furnitureAmountInput != null)
+                    _furnitureAmountInput.text = "1";
+                SetStatus("Invalid amount. Using 1.");
+            }
+
+            SpawnSelectedFurnitureAmountInternal(amount);
+        }
+
+        private void SpawnSelectedFurnitureAmountInternal(int amount)
+        {
+            if (_selectedFurnitureEntry == null)
+                return;
+
+            if (!FurnitureOperations.IsReady())
+            {
+                SetStatus("Furniture system not ready.");
+                return;
+            }
+
+            int requested = Mathf.Clamp(amount, 1, 999);
+            for (int i = 0; i < requested; i++)
+                FurnitureOperations.Spawn(_selectedFurnitureEntry.Furniture, _selectedFurnitureEntry.Skin);
+
+            SetStatus($"Spawned {requested}x {_selectedFurnitureEntry.Title}");
+            RefreshFurnitureList();
+        }
+
+        private void ClearFurnitureFilters()
+        {
+            if (_furnitureCategoryInput != null)
+                _furnitureCategoryInput.text = string.Empty;
+            if (_furnitureSearchInput != null)
+                _furnitureSearchInput.text = string.Empty;
+            _furnitureCategoryScrollStartIndex = 0;
+            _furnitureSkinScrollStartIndex = 0;
+            RefreshFurnitureList();
+            SetStatus("Furniture filters cleared.");
+        }
+
+        private void RefreshFurnitureSkinsList()
+        {
+            _selectedFurnitureSkinEntries.Clear();
+            if (_selectedFurnitureEntry == null)
+            {
+                ApplyFurnitureSkinCells();
+                return;
+            }
+
+            string selectedFurnitureId = GetFurnitureIdText(_selectedFurnitureEntry);
+            _selectedFurnitureSkinEntries.AddRange(_furnitureEntries
+                .Where(e => string.Equals(GetFurnitureIdText(e), selectedFurnitureId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(e => e.Skin == null ? 0 : 1)
+                .ThenBy(e => e.Title, StringComparer.OrdinalIgnoreCase));
+
+            _furnitureSkinScrollStartIndex = Mathf.Clamp(_furnitureSkinScrollStartIndex, 0, Mathf.Max(0, _selectedFurnitureSkinEntries.Count - _furnitureSkinCells.Count));
+            ApplyFurnitureSkinCells();
+        }
+
+        private void ApplyFurnitureSkinCells()
+        {
+            for (int i = 0; i < _furnitureSkinCells.Count; i++)
+            {
+                int dataIndex = _furnitureSkinScrollStartIndex + i;
+                FurnitureEntry entry = dataIndex < _selectedFurnitureSkinEntries.Count ? _selectedFurnitureSkinEntries[dataIndex] : null;
+                FurnitureSkinCellRef cell = _furnitureSkinCells[i];
+                cell.Entry = entry;
+
+                if (entry == null)
+                {
+                    cell.Label.text = string.Empty;
+                    cell.Button.interactable = false;
+                    continue;
+                }
+
+                string skinLabel = GetFurnitureSkinId(entry);
+                int owned = Mathf.Max(0, entry.OwnedCount);
+                cell.Label.text = $"{skinLabel}  ({owned})";
+                cell.Button.interactable = true;
+            }
+        }
+
+        private void OnFurnitureSkinCellClicked(int index)
+        {
+            if (index < 0 || index >= _furnitureSkinCells.Count)
+                return;
+
+            FurnitureEntry entry = _furnitureSkinCells[index].Entry;
+            if (entry == null)
+                return;
+
+            _selectedFurnitureEntry = entry;
+            UpdateSelectedFurnitureUi();
+            ApplyFurnitureCells();
+            RefreshFurnitureSkinsList();
+            SetStatus($"Skin selected: {GetFurnitureSkinId(entry)}");
+        }
+
+        private void EnsureFurnitureCategoryOptions()
+        {
+            _furnitureCategoryOptions.Clear();
+            _furnitureCategoryOptions.Add("All");
+            foreach (string category in _furnitureEntries.SelectMany(GetFurnitureCategories).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c))
+                _furnitureCategoryOptions.Add(category);
+        }
+
+        private void RefreshFurnitureCategoryBrowserList()
+        {
+            _filteredFurnitureCategoryOptions.Clear();
+            if (_furnitureCategoryOptions.Count == 0)
+            {
+                ApplyFurnitureCategoryCells();
+                return;
+            }
+
+            string q = (_furnitureCategoryInput?.text ?? string.Empty).Trim();
+            IEnumerable<string> categories = _furnitureCategoryOptions;
+            if (!string.IsNullOrEmpty(q))
+                categories = categories.Where(c => c.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0);
+
+            _filteredFurnitureCategoryOptions.AddRange(categories);
+            _furnitureCategoryScrollStartIndex = Mathf.Clamp(_furnitureCategoryScrollStartIndex, 0, Mathf.Max(0, _filteredFurnitureCategoryOptions.Count - _furnitureCategoryCells.Count));
+            ApplyFurnitureCategoryCells();
+        }
+
+        private void ApplyFurnitureCategoryCells()
+        {
+            for (int i = 0; i < _furnitureCategoryCells.Count; i++)
+            {
+                int dataIndex = _furnitureCategoryScrollStartIndex + i;
+                string category = dataIndex < _filteredFurnitureCategoryOptions.Count ? _filteredFurnitureCategoryOptions[dataIndex] : null;
+                CategoryCellRef cell = _furnitureCategoryCells[i];
+                cell.Category = category;
+
+                if (string.IsNullOrEmpty(category))
+                {
+                    cell.Label.text = string.Empty;
+                    cell.Button.interactable = false;
+                }
+                else
+                {
+                    cell.Label.text = category;
+                    cell.Button.interactable = true;
+                }
+            }
+        }
+
+        private void OnFurnitureCategoryCellClicked(int index)
+        {
+            if (index < 0 || index >= _furnitureCategoryCells.Count)
+                return;
+
+            string category = _furnitureCategoryCells[index].Category;
+            if (string.IsNullOrEmpty(category))
+                return;
+
+            if (_furnitureCategoryInput != null)
+                _furnitureCategoryInput.text = string.Equals(category, "All", StringComparison.OrdinalIgnoreCase) ? string.Empty : category;
+
+            _furnitureCategoryBrowserVisible = false;
+            if (_furnitureCategoryBrowserPanel != null)
+                _furnitureCategoryBrowserPanel.SetActive(false);
+
+            SetStatus(string.Equals(category, "All", StringComparison.OrdinalIgnoreCase)
+                ? "Furniture category cleared."
+                : $"Furniture category set: {category}");
+        }
+
+        private void ToggleFurnitureCategoryBrowser()
+        {
+            _furnitureCategoryBrowserVisible = !_furnitureCategoryBrowserVisible;
+            if (_furnitureCategoryBrowserPanel != null)
+                _furnitureCategoryBrowserPanel.SetActive(_furnitureCategoryBrowserVisible);
+
+            if (_furnitureCategoryBrowserVisible)
+            {
+                _furnitureCategoryScrollStartIndex = 0;
+                RefreshFurnitureCategoryBrowserList();
+            }
+        }
+
+        private void ClearFurnitureCategoryFilter()
+        {
+            if (_furnitureCategoryInput == null)
+                return;
+
+            _furnitureCategoryInput.text = string.Empty;
+            _furnitureCategoryScrollStartIndex = 0;
+            RefreshFurnitureCategoryBrowserList();
+            SetStatus("Furniture category cleared.");
+        }
+
+        private static string GetFurnitureIdText(FurnitureEntry entry)
+        {
+            object rawId = entry?.Furniture?.Id;
+            return rawId?.ToString() ?? "-";
+        }
+
+        private static bool TryGetFurnitureNumericId(FurnitureEntry entry, out int id)
+        {
+            object rawId = entry?.Furniture?.Id;
+            if (rawId is int intId)
+            {
+                id = intId;
+                return true;
+            }
+
+            if (rawId != null && int.TryParse(rawId.ToString(), out int parsed))
+            {
+                id = parsed;
+                return true;
+            }
+
+            id = -1;
+            return false;
+        }
+
+        private static string GetFurnitureSkinId(FurnitureEntry entry)
+        {
+            if (entry?.Skin == null)
+                return "Default";
+
+            return string.IsNullOrWhiteSpace(entry.Skin.id) ? "Default" : entry.Skin.id;
+        }
+
+        private static IEnumerable<string> GetFurnitureCategories(FurnitureEntry entry)
+        {
+            object furniture = entry?.Furniture;
+            if (furniture == null)
+                return Array.Empty<string>();
+
+            var categories = new List<string>();
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            string[] memberNames = { "categories", "category", "type", "room", "tags" };
+
+            foreach (string memberName in memberNames)
+            {
+                MemberInfo member = (MemberInfo)furniture.GetType().GetField(memberName, flags) ?? furniture.GetType().GetProperty(memberName, flags);
+                if (member == null)
+                    continue;
+
+                object raw = member switch
+                {
+                    FieldInfo fi => fi.GetValue(furniture),
+                    PropertyInfo pi => pi.CanRead ? pi.GetValue(furniture, null) : null,
+                    _ => null
+                };
+
+                if (raw == null)
+                    continue;
+
+                if (raw is string text)
+                {
+                    if (!string.IsNullOrWhiteSpace(text))
+                        categories.Add(text.Trim());
+                    continue;
+                }
+
+                if (raw is System.Collections.IEnumerable enumerable && raw is not string)
+                {
+                    foreach (object value in enumerable)
+                    {
+                        string asText = value?.ToString();
+                        if (!string.IsNullOrWhiteSpace(asText))
+                            categories.Add(asText.Trim());
+                    }
+                    continue;
+                }
+
+                string single = raw.ToString();
+                if (!string.IsNullOrWhiteSpace(single))
+                    categories.Add(single.Trim());
+            }
+
+            return categories.Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
         private void RefreshItemList()
@@ -1395,6 +2298,62 @@ namespace OpenSewer
             ApplyItemCells();
         }
 
+        private void HandleFurnitureScrollInput()
+        {
+            if (_activeTab != MenuTab.Furniture || _furnitureGridHoverRegion == null || _filteredFurnitureEntries.Count <= _furnitureCells.Count)
+                return;
+
+            if (!RectTransformUtility.RectangleContainsScreenPoint(_furnitureGridHoverRegion, Input.mousePosition, null))
+                return;
+
+            float wheel = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(wheel) < 0.01f)
+                return;
+
+            int step = 5;
+            if (wheel > 0f)
+                _furnitureScrollStartIndex -= step;
+            else
+                _furnitureScrollStartIndex += step;
+
+            _furnitureScrollStartIndex = Mathf.Clamp(_furnitureScrollStartIndex, 0, Mathf.Max(0, _filteredFurnitureEntries.Count - _furnitureCells.Count));
+            ApplyFurnitureCells();
+        }
+
+        private void HandleFurnitureCategoryScrollInput()
+        {
+            if (_activeTab != MenuTab.Furniture || !_furnitureCategoryBrowserVisible || _furnitureCategoryListHoverRegion == null || _filteredFurnitureCategoryOptions.Count <= _furnitureCategoryCells.Count)
+                return;
+
+            if (!RectTransformUtility.RectangleContainsScreenPoint(_furnitureCategoryListHoverRegion, Input.mousePosition, null))
+                return;
+
+            float wheel = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(wheel) < 0.01f)
+                return;
+
+            _furnitureCategoryScrollStartIndex += wheel > 0f ? -1 : 1;
+            _furnitureCategoryScrollStartIndex = Mathf.Clamp(_furnitureCategoryScrollStartIndex, 0, Mathf.Max(0, _filteredFurnitureCategoryOptions.Count - _furnitureCategoryCells.Count));
+            ApplyFurnitureCategoryCells();
+        }
+
+        private void HandleFurnitureSkinScrollInput()
+        {
+            if (_activeTab != MenuTab.Furniture || _furnitureSkinListHoverRegion == null || _selectedFurnitureSkinEntries.Count <= _furnitureSkinCells.Count)
+                return;
+
+            if (!RectTransformUtility.RectangleContainsScreenPoint(_furnitureSkinListHoverRegion, Input.mousePosition, null))
+                return;
+
+            float wheel = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(wheel) < 0.01f)
+                return;
+
+            _furnitureSkinScrollStartIndex += wheel > 0f ? -1 : 1;
+            _furnitureSkinScrollStartIndex = Mathf.Clamp(_furnitureSkinScrollStartIndex, 0, Mathf.Max(0, _selectedFurnitureSkinEntries.Count - _furnitureSkinCells.Count));
+            ApplyFurnitureSkinCells();
+        }
+
         private void HandleCategoryScrollInput()
         {
             if (_activeTab != MenuTab.Items || !_categoryBrowserVisible || _categoryListHoverRegion == null || _filteredCategoryOptions.Count <= _categoryCells.Count)
@@ -1426,6 +2385,22 @@ namespace OpenSewer
             int start = _itemScrollStartIndex + 1;
             int end = Mathf.Min(_itemScrollStartIndex + _itemCells.Count, _filteredItems.Count);
             _itemListInfoText.text = $"Showing: {start}-{end} of {_filteredItems.Count}";
+        }
+
+        private void UpdateFurnitureListInfo()
+        {
+            if (_furnitureListInfoText == null)
+                return;
+
+            if (_filteredFurnitureEntries.Count == 0)
+            {
+                _furnitureListInfoText.text = "Showing: 0";
+                return;
+            }
+
+            int start = _furnitureScrollStartIndex + 1;
+            int end = Mathf.Min(_furnitureScrollStartIndex + _furnitureCells.Count, _filteredFurnitureEntries.Count);
+            _furnitureListInfoText.text = $"Showing: {start}-{end} of {_filteredFurnitureEntries.Count}";
         }
 
         private void EnsureItemCategoryOptions()
@@ -1616,6 +2591,8 @@ namespace OpenSewer
 
             if (_activeTab == MenuTab.Items)
                 RefreshItemList();
+            else if (_activeTab == MenuTab.Furniture)
+                RefreshFurnitureList();
 
             SetStatus($"Active tab: {_activeTab}");
         }
