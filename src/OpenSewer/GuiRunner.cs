@@ -197,6 +197,13 @@ namespace OpenSewer
         private TMP_Text _statsSelectedRangeText;
         private TMP_Text _statsSelectedCurrentText;
         private TMP_Text _statsSelectedFreezeStateText;
+        private TMP_Text _timeCurrentDayText;
+        private TMP_Text _timeCurrentClockText;
+        private TMP_Text _timeFreezeStateText;
+        private TMP_Text _timeTargetText;
+        private TMP_InputField _timeSetDayInput;
+        private TMP_InputField _timeSetHourInput;
+        private TMP_InputField _timeSetMinuteInput;
         private RectTransform _statsListHoverRegion;
         private RectTransform _categoryListHoverRegion;
         private GameObject _categoryBrowserPanel;
@@ -271,6 +278,7 @@ namespace OpenSewer
             HandleFurnitureCategoryScrollInput();
             HandleFurnitureSkinScrollInput();
             HandleCategoryScrollInput();
+            RefreshTimeUi();
         }
 
         private void BuildIfNeeded()
@@ -782,46 +790,200 @@ namespace OpenSewer
 
         private GameObject BuildTimePage(Transform parent)
         {
-            RectTransform page = NewPanelWithSprite(parent, "TimePage", "main_UI_background_002", Color.white, Image.Type.Sliced);
-            Stretch(page);
+            var page = NewUI("TimePage", parent);
+            Stretch(RT(page));
 
-            RectTransform body = NewPanelWithSprite(page, "Body", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
-            Stretch(body);
-            body.offsetMin = new Vector2(18f, 18f);
-            body.offsetMax = new Vector2(-18f, -18f);
+            RectTransform leftPanel = NewPanelWithSprite(page.transform, "TimeLeftPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            leftPanel.anchorMin = new Vector2(0f, 0f);
+            leftPanel.anchorMax = new Vector2(0f, 1f);
+            leftPanel.pivot = new Vector2(0f, 0.5f);
+            leftPanel.anchoredPosition = Vector2.zero;
+            leftPanel.sizeDelta = new Vector2(458f, 0f);
 
-            TMP_Text title = NewText(body, "TIME CONTROLS", 22, TextAlignmentOptions.TopLeft, Color.white);
-            title.rectTransform.offsetMin = new Vector2(24f, 0f);
-            title.rectTransform.offsetMax = new Vector2(0f, -24f);
+            RectTransform leftBody = NewPanelWithSprite(leftPanel, "LeftBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            Stretch(leftBody);
+            leftBody.offsetMin = new Vector2(18f, 18f);
+            leftBody.offsetMax = new Vector2(-18f, -18f);
 
-            RectTransform btnA = BuildActionButton(body.transform, "Toggle Freeze", new Vector2(24f, -72f), () =>
-            {
-                TimeFreezer.FreezeEnabled = !TimeFreezer.FreezeEnabled;
-                SetStatus($"Time freeze: {(TimeFreezer.FreezeEnabled ? "ON" : "OFF")}");
-            });
+            TMP_Text leftHeader = NewText(leftBody, "CURRENT TIME", 18, TextAlignmentOptions.TopLeft, Color.white);
+            leftHeader.rectTransform.offsetMin = new Vector2(12f, 0f);
+            leftHeader.rectTransform.offsetMax = new Vector2(0f, -12f);
 
-            BuildActionButton(body.transform, "Capture Current Time", new Vector2(24f, -120f), () =>
-            {
-                TimeFreezer.CaptureCurrent();
-                SetStatus("Captured current time target.");
-            });
+            RectTransform timeInfo = NewPanelWithSprite(leftBody, "TimeInfo", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            timeInfo.anchorMin = new Vector2(0f, 1f);
+            timeInfo.anchorMax = new Vector2(1f, 1f);
+            timeInfo.pivot = new Vector2(0.5f, 1f);
+            timeInfo.anchoredPosition = new Vector2(0f, -44f);
+            timeInfo.sizeDelta = new Vector2(0f, 170f);
 
-            BuildActionButton(body.transform, "Set 09:00", new Vector2(24f, -168f), () =>
-            {
-                if (!TimeAccess.IsReady())
-                {
-                    SetStatus("Time system not ready.");
-                    return;
-                }
+            _timeCurrentDayText = NewText(timeInfo, "Day: -", 14, TextAlignmentOptions.TopLeft, Color.white);
+            _timeCurrentDayText.rectTransform.offsetMin = new Vector2(12f, 0f);
+            _timeCurrentDayText.rectTransform.offsetMax = new Vector2(0f, -12f);
 
-                int day = TimeAccess.GetDay();
-                TimeAccess.SetHourMinute(9, 0);
-                if (TimeFreezer.FreezeEnabled)
-                    TimeFreezer.SetTarget(day, 9, 0);
-                SetStatus("Set time to 09:00.");
-            });
+            _timeCurrentClockText = NewText(timeInfo, "Time: --:--", 14, TextAlignmentOptions.TopLeft, Color.white);
+            _timeCurrentClockText.rectTransform.offsetMin = new Vector2(12f, 0f);
+            _timeCurrentClockText.rectTransform.offsetMax = new Vector2(0f, -40f);
 
-            _ = btnA;
+            _timeFreezeStateText = NewText(timeInfo, "Freeze: OFF", 14, TextAlignmentOptions.TopLeft, new Color(0.9f, 0.75f, 0.75f, 1f));
+            _timeFreezeStateText.rectTransform.offsetMin = new Vector2(12f, 0f);
+            _timeFreezeStateText.rectTransform.offsetMax = new Vector2(0f, -68f);
+
+            _timeTargetText = NewText(timeInfo, "Target: Day - --:--", 13, TextAlignmentOptions.TopLeft, new Color(0.86f, 0.86f, 0.86f, 1f));
+            _timeTargetText.rectTransform.offsetMin = new Vector2(12f, 0f);
+            _timeTargetText.rectTransform.offsetMax = new Vector2(0f, -96f);
+
+            RectTransform presetPanel = NewPanelWithSprite(leftBody, "PresetPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            presetPanel.anchorMin = new Vector2(0f, 0f);
+            presetPanel.anchorMax = new Vector2(1f, 1f);
+            presetPanel.offsetMin = new Vector2(0f, 12f);
+            presetPanel.offsetMax = new Vector2(0f, -232f);
+
+            TMP_Text presetHeader = NewText(presetPanel, "QUICK SET", 14, TextAlignmentOptions.TopLeft, Color.white);
+            presetHeader.rectTransform.offsetMin = new Vector2(12f, 0f);
+            presetHeader.rectTransform.offsetMax = new Vector2(0f, -12f);
+
+            RectTransform presetBody = NewPanelWithSprite(presetPanel, "PresetBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            presetBody.anchorMin = new Vector2(0f, 0f);
+            presetBody.anchorMax = new Vector2(1f, 1f);
+            presetBody.offsetMin = new Vector2(10f, 10f);
+            presetBody.offsetMax = new Vector2(-10f, -36f);
+
+            var presetRoot = NewUI("PresetRoot", presetBody);
+            Stretch(RT(presetRoot));
+            var presetLayout = presetRoot.AddComponent<VerticalLayoutGroup>();
+            presetLayout.spacing = 6f;
+            presetLayout.childControlWidth = true;
+            presetLayout.childControlHeight = true;
+            presetLayout.childForceExpandWidth = true;
+            presetLayout.childForceExpandHeight = false;
+            presetLayout.padding = new RectOffset(6, 6, 6, 6);
+
+            var rowA = NewUI("PresetRowA", presetRoot.transform);
+            var rowALayout = rowA.AddComponent<HorizontalLayoutGroup>();
+            rowALayout.spacing = 6f;
+            rowALayout.childControlWidth = true;
+            rowALayout.childControlHeight = true;
+            rowALayout.childForceExpandWidth = true;
+            rowALayout.childForceExpandHeight = false;
+            rowA.AddComponent<LayoutElement>().preferredHeight = 42f;
+            BuildInlineButton(rowA.transform, "06:00", () => SetTimePreset(6, 0), 0f, 42f);
+            BuildInlineButton(rowA.transform, "09:00", () => SetTimePreset(9, 0), 0f, 42f);
+
+            var rowB = NewUI("PresetRowB", presetRoot.transform);
+            var rowBLayout = rowB.AddComponent<HorizontalLayoutGroup>();
+            rowBLayout.spacing = 6f;
+            rowBLayout.childControlWidth = true;
+            rowBLayout.childControlHeight = true;
+            rowBLayout.childForceExpandWidth = true;
+            rowBLayout.childForceExpandHeight = false;
+            rowB.AddComponent<LayoutElement>().preferredHeight = 42f;
+            BuildInlineButton(rowB.transform, "12:00", () => SetTimePreset(12, 0), 0f, 42f);
+            BuildInlineButton(rowB.transform, "18:00", () => SetTimePreset(18, 0), 0f, 42f);
+
+            var rowC = NewUI("PresetRowC", presetRoot.transform);
+            var rowCLayout = rowC.AddComponent<HorizontalLayoutGroup>();
+            rowCLayout.spacing = 6f;
+            rowCLayout.childControlWidth = true;
+            rowCLayout.childControlHeight = true;
+            rowCLayout.childForceExpandWidth = true;
+            rowCLayout.childForceExpandHeight = false;
+            rowC.AddComponent<LayoutElement>().preferredHeight = 42f;
+            BuildInlineButton(rowC.transform, "00:00", () => SetTimePreset(0, 0), 0f, 42f);
+            BuildInlineButton(rowC.transform, "23:00", () => SetTimePreset(23, 0), 0f, 42f);
+
+            RectTransform rightPanel = NewPanelWithSprite(page.transform, "TimeRightPanel", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            rightPanel.anchorMin = new Vector2(0f, 0f);
+            rightPanel.anchorMax = new Vector2(1f, 1f);
+            rightPanel.pivot = new Vector2(0.5f, 0.5f);
+            rightPanel.offsetMin = new Vector2(468f, 0f);
+            rightPanel.offsetMax = Vector2.zero;
+
+            RectTransform topInfo = NewPanelWithSprite(rightPanel, "TopInfo", "main_UI_background_002", Color.white, Image.Type.Sliced);
+            topInfo.anchorMin = new Vector2(0f, 1f);
+            topInfo.anchorMax = new Vector2(1f, 1f);
+            topInfo.pivot = new Vector2(0.5f, 1f);
+            topInfo.anchoredPosition = Vector2.zero;
+            topInfo.sizeDelta = new Vector2(0f, 470f);
+
+            TMP_Text controlsHeader = NewText(topInfo, "TIME CONTROLS", 18, TextAlignmentOptions.TopLeft, Color.white);
+            controlsHeader.rectTransform.offsetMin = new Vector2(28f, 0f);
+            controlsHeader.rectTransform.offsetMax = new Vector2(0f, -26f);
+
+            RectTransform topInfoBody = NewPanelWithSprite(topInfo, "TopInfoBody", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            topInfoBody.anchorMin = new Vector2(0f, 0f);
+            topInfoBody.anchorMax = new Vector2(1f, 1f);
+            topInfoBody.offsetMin = new Vector2(18f, 18f);
+            topInfoBody.offsetMax = new Vector2(-18f, -54f);
+
+            var controls = NewUI("Controls", topInfoBody);
+            Stretch(RT(controls));
+            var v = controls.AddComponent<VerticalLayoutGroup>();
+            v.spacing = 8f;
+            v.childControlWidth = true;
+            v.childControlHeight = true;
+            v.childForceExpandHeight = false;
+            v.padding = new RectOffset(14, 14, 10, 10);
+
+            _timeSetDayInput = BuildInputRow(controls.transform, "Day");
+            _timeSetDayInput.contentType = TMP_InputField.ContentType.IntegerNumber;
+            _timeSetDayInput.characterLimit = 6;
+
+            var hourMinuteRow = NewUI("HourMinuteRow", controls.transform);
+            var hmLayout = hourMinuteRow.AddComponent<HorizontalLayoutGroup>();
+            hmLayout.spacing = 6f;
+            hmLayout.childControlWidth = true;
+            hmLayout.childControlHeight = true;
+            hmLayout.childForceExpandWidth = true;
+            hmLayout.childForceExpandHeight = false;
+            hourMinuteRow.AddComponent<LayoutElement>().preferredHeight = 34f;
+
+            _timeSetHourInput = BuildInputRow(hourMinuteRow.transform, "Hour (0-23)");
+            _timeSetHourInput.contentType = TMP_InputField.ContentType.IntegerNumber;
+            _timeSetHourInput.characterLimit = 2;
+
+            _timeSetMinuteInput = BuildInputRow(hourMinuteRow.transform, "Minute (0-59)");
+            _timeSetMinuteInput.contentType = TMP_InputField.ContentType.IntegerNumber;
+            _timeSetMinuteInput.characterLimit = 2;
+
+            var actionRowA = NewUI("ActionRowA", controls.transform);
+            var hA = actionRowA.AddComponent<HorizontalLayoutGroup>();
+            hA.spacing = 6f;
+            hA.childForceExpandWidth = true;
+            hA.childForceExpandHeight = false;
+            actionRowA.AddComponent<LayoutElement>().preferredHeight = 46f;
+            BuildInlineButton(actionRowA.transform, "Apply Time", ApplyTimeInputs, 0f, 46f);
+            BuildInlineButton(actionRowA.transform, "Capture Current", CaptureCurrentTimeTarget, 0f, 46f);
+
+            var actionRowB = NewUI("ActionRowB", controls.transform);
+            var hB = actionRowB.AddComponent<HorizontalLayoutGroup>();
+            hB.spacing = 6f;
+            hB.childForceExpandWidth = true;
+            hB.childForceExpandHeight = false;
+            actionRowB.AddComponent<LayoutElement>().preferredHeight = 46f;
+            BuildInlineButton(actionRowB.transform, "Toggle Freeze", ToggleTimeFreeze, 0f, 46f);
+            BuildInlineButton(actionRowB.transform, "Use As Target", SetFreezeTargetFromInputs, 0f, 46f);
+
+            RectTransform bottomInfo = NewPanelWithSprite(rightPanel, "BottomInfo", "main_UI_background_empty_001", Color.white, Image.Type.Tiled);
+            bottomInfo.anchorMin = new Vector2(0f, 0f);
+            bottomInfo.anchorMax = new Vector2(1f, 1f);
+            bottomInfo.offsetMin = new Vector2(18f, 18f);
+            bottomInfo.offsetMax = new Vector2(-18f, -482f);
+
+            TMP_Text helper = NewText(
+                bottomInfo,
+                "Set custom day/hour/minute, apply instantly, and optionally freeze time at a target.",
+                12,
+                TextAlignmentOptions.TopLeft,
+                new Color(0.82f, 0.82f, 0.82f, 1f));
+            helper.rectTransform.anchorMin = new Vector2(0f, 0f);
+            helper.rectTransform.anchorMax = new Vector2(1f, 1f);
+            helper.rectTransform.pivot = new Vector2(0f, 1f);
+            helper.rectTransform.offsetMin = new Vector2(12f, 12f);
+            helper.rectTransform.offsetMax = new Vector2(-12f, -12f);
+            helper.enableWordWrapping = true;
+            helper.overflowMode = TextOverflowModes.Ellipsis;
+
+            RefreshTimeUi(force: true);
             return page.gameObject;
         }
 
@@ -1029,6 +1191,176 @@ namespace OpenSewer
             RefreshStatsList();
             RefreshStatsCategoryShortcutStates();
             return page;
+        }
+
+        private void RefreshTimeUi(bool force = false)
+        {
+            if (!force && _activeTab != MenuTab.Time)
+                return;
+
+            bool ready = TimeAccess.IsReady();
+            if (_timeCurrentDayText != null)
+                _timeCurrentDayText.text = ready ? $"Day: {TimeAccess.GetDay()}" : "Day: -";
+
+            if (_timeCurrentClockText != null)
+            {
+                if (ready)
+                {
+                    TimeAccess.GetHourMinute(out int h, out int m);
+                    _timeCurrentClockText.text = $"Time: {h:00}:{m:00}";
+                }
+                else
+                {
+                    _timeCurrentClockText.text = "Time: --:--";
+                }
+            }
+
+            if (_timeFreezeStateText != null)
+            {
+                _timeFreezeStateText.text = $"Freeze: {(TimeFreezer.FreezeEnabled ? "ON" : "OFF")}";
+                _timeFreezeStateText.color = TimeFreezer.FreezeEnabled
+                    ? new Color(0.75f, 0.94f, 0.74f, 1f)
+                    : new Color(0.9f, 0.75f, 0.75f, 1f);
+            }
+
+            if (_timeTargetText != null)
+                _timeTargetText.text = $"Target: Day {TimeFreezer.FrozenDay} {TimeFreezer.FrozenHour:00}:{TimeFreezer.FrozenMinute:00}";
+
+            if (!ready)
+                return;
+
+            if (_timeSetDayInput != null && string.IsNullOrWhiteSpace(_timeSetDayInput.text))
+                _timeSetDayInput.text = TimeAccess.GetDay().ToString();
+
+            if (_timeSetHourInput != null && string.IsNullOrWhiteSpace(_timeSetHourInput.text))
+            {
+                TimeAccess.GetHourMinute(out int h, out _);
+                _timeSetHourInput.text = h.ToString("00");
+            }
+
+            if (_timeSetMinuteInput != null && string.IsNullOrWhiteSpace(_timeSetMinuteInput.text))
+            {
+                TimeAccess.GetHourMinute(out _, out int m);
+                _timeSetMinuteInput.text = m.ToString("00");
+            }
+        }
+
+        private void ToggleTimeFreeze()
+        {
+            TimeFreezer.FreezeEnabled = !TimeFreezer.FreezeEnabled;
+            if (TimeFreezer.FreezeEnabled && TimeAccess.IsReady())
+                TimeFreezer.CaptureCurrent();
+            RefreshTimeUi(force: true);
+            SetStatus($"Time freeze: {(TimeFreezer.FreezeEnabled ? "ON" : "OFF")}");
+        }
+
+        private void CaptureCurrentTimeTarget()
+        {
+            if (!TimeAccess.IsReady())
+            {
+                SetStatus("Time system not ready.");
+                return;
+            }
+
+            TimeFreezer.CaptureCurrent();
+            _timeSetDayInput.text = TimeFreezer.FrozenDay.ToString();
+            _timeSetHourInput.text = TimeFreezer.FrozenHour.ToString("00");
+            _timeSetMinuteInput.text = TimeFreezer.FrozenMinute.ToString("00");
+            RefreshTimeUi(force: true);
+            SetStatus("Captured current time target.");
+        }
+
+        private void SetFreezeTargetFromInputs()
+        {
+            if (!TryReadTimeInputs(out int day, out int hour, out int minute))
+                return;
+
+            TimeFreezer.SetTarget(day, hour, minute);
+            RefreshTimeUi(force: true);
+            SetStatus($"Freeze target set: Day {day} {hour:00}:{minute:00}");
+        }
+
+        private void ApplyTimeInputs()
+        {
+            if (!TimeAccess.IsReady())
+            {
+                SetStatus("Time system not ready.");
+                return;
+            }
+
+            if (!TryReadTimeInputs(out int day, out int hour, out int minute))
+                return;
+
+            TimeAccess.SetDay(day);
+            TimeAccess.SetHourMinute(hour, minute);
+
+            if (TimeFreezer.FreezeEnabled)
+                TimeFreezer.SetTarget(day, hour, minute);
+
+            RefreshTimeUi(force: true);
+            SetStatus($"Set time: Day {day} {hour:00}:{minute:00}");
+        }
+
+        private void SetTimePreset(int hour, int minute)
+        {
+            int safeHour = TimeAccess.ClampHour(hour);
+            int safeMinute = TimeAccess.ClampMinute(minute);
+            if (!TimeAccess.IsReady())
+            {
+                SetStatus("Time system not ready.");
+                return;
+            }
+
+            int day = TimeAccess.GetDay();
+            TimeAccess.SetHourMinute(safeHour, safeMinute);
+            if (TimeFreezer.FreezeEnabled)
+                TimeFreezer.SetTarget(day, safeHour, safeMinute);
+
+            if (_timeSetHourInput != null)
+                _timeSetHourInput.text = safeHour.ToString("00");
+            if (_timeSetMinuteInput != null)
+                _timeSetMinuteInput.text = safeMinute.ToString("00");
+            if (_timeSetDayInput != null)
+                _timeSetDayInput.text = day.ToString();
+
+            RefreshTimeUi(force: true);
+            SetStatus($"Set time to {safeHour:00}:{safeMinute:00}");
+        }
+
+        private bool TryReadTimeInputs(out int day, out int hour, out int minute)
+        {
+            day = TimeAccess.GetDay();
+            TimeAccess.GetHourMinute(out hour, out minute);
+
+            if (_timeSetDayInput != null && !string.IsNullOrWhiteSpace(_timeSetDayInput.text) && !int.TryParse(_timeSetDayInput.text, out day))
+            {
+                SetStatus("Invalid day input.");
+                return false;
+            }
+
+            if (_timeSetHourInput != null && !string.IsNullOrWhiteSpace(_timeSetHourInput.text) && !int.TryParse(_timeSetHourInput.text, out hour))
+            {
+                SetStatus("Invalid hour input.");
+                return false;
+            }
+
+            if (_timeSetMinuteInput != null && !string.IsNullOrWhiteSpace(_timeSetMinuteInput.text) && !int.TryParse(_timeSetMinuteInput.text, out minute))
+            {
+                SetStatus("Invalid minute input.");
+                return false;
+            }
+
+            day = TimeAccess.ClampDay(day);
+            hour = TimeAccess.ClampHour(hour);
+            minute = TimeAccess.ClampMinute(minute);
+
+            if (_timeSetDayInput != null)
+                _timeSetDayInput.text = day.ToString();
+            if (_timeSetHourInput != null)
+                _timeSetHourInput.text = hour.ToString("00");
+            if (_timeSetMinuteInput != null)
+                _timeSetMinuteInput.text = minute.ToString("00");
+            return true;
         }
 
         private GameObject BuildFurniturePage(Transform parent)
@@ -3210,6 +3542,8 @@ namespace OpenSewer
                 RefreshFurnitureList();
             else if (_activeTab == MenuTab.Stats)
                 RefreshStatsList();
+            else if (_activeTab == MenuTab.Time)
+                RefreshTimeUi(force: true);
 
             SetStatus($"Active tab: {_activeTab}");
         }
